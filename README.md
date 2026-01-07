@@ -1,2 +1,0 @@
-# vrtx-scripts
-User Scripts
