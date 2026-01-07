@@ -1,0 +1,256 @@
+================================================================
+VORTEX SYSTEMS - FILE ORGANIZATION
+Admin vs User File Separation
+================================================================
+
+SPLIT COMPLETED - NO ADMIN CODE ON GITHUB!
+
+================================================================
+ADMIN FILES (INTERNAL/PRIVATE - DO NOT PUT ON GITHUB)
+================================================================
+
+1-Admin-Setup.bat
+  - Master admin launcher
+  - Calls admin-only scripts
+  - Must run as Administrator
+
+Setup-PrintServer-Admin.ps1
+  - Configures printer trust settings
+  - Point and Print configuration
+  - Admin-only
+
+Admin-DriveConfig.ps1
+  - Configures network drive registry settings
+  - RestoreConnection (network wait at boot)
+  - EnableLinkedConnections (admin drive access)
+  - Admin-only
+
+Deploy Location:
+  - Internal network share: \\VORTEXFS\IT\Admin\
+  - Or copy directly to PCs: C:\IT\Admin\
+
+================================================================
+USER FILES (PUBLIC - CAN GO ON GITHUB)
+================================================================
+
+2-User-Setup.bat
+  - Master user launcher
+  - Calls user-only scripts
+  - Run as regular user
+
+Deploy-Printers-Users.ps1
+  - User printer deployment
+  - Server-authoritative permissions
+  - Safe for GitHub (no admin code)
+
+User-DriveMapper.ps1
+  - User drive mapping
+  - Credential prompts
+  - Drive mapping logic
+  - Safe for GitHub (no admin code)
+
+README.txt
+  - User documentation
+
+install.ps1
+  - GitHub auto-installer
+  - Downloads user files only
+
+Deploy Location:
+  - Public GitHub: https://github.com/username/VortexUserSetup
+  - Or network share: \\VORTEXFS\IT\UserSetup\
+  - Or local: C:\IT\UserSetup\
+
+================================================================
+WHAT GOT SPLIT
+================================================================
+
+OLD: Mount-Network-Drives.ps1 (Shared)
+  - Had BOTH admin and user code
+  - Could not go on GitHub (contained admin registry code)
+
+NEW: Split into TWO files:
+
+Admin-DriveConfig.ps1 (Admin Only)
+  - ONLY admin registry settings
+  - EnableLinkedConnections
+  - RestoreConnection
+  - Keep internal/private
+
+User-DriveMapper.ps1 (User Only)
+  - ONLY user drive mapping
+  - Credential prompts
+  - Drive mapping functions
+  - Menu options
+  - Safe for GitHub
+
+================================================================
+GITHUB DEPLOYMENT
+================================================================
+
+What to upload to PUBLIC GitHub repo:
+
+REQUIRED FILES:
+  1. 2-User-Setup.bat
+  2. User-DriveMapper.ps1
+  3. Deploy-Printers-Users.ps1
+  4. README.txt
+  5. install.ps1
+
+DO NOT UPLOAD:
+  - 1-Admin-Setup.bat
+  - Setup-PrintServer-Admin.ps1
+  - Admin-DriveConfig.ps1
+  - Mount-Network-Drives.ps1 (old shared file)
+
+Repository name: VortexUserSetup (or similar)
+Visibility: PUBLIC
+
+================================================================
+INSTALLATION COMMANDS
+================================================================
+
+GitHub Install (User Only):
+-----------------------------------------------------------
+irm https://raw.githubusercontent.com/USERNAME/VortexUserSetup/main/install.ps1 | iex
+
+This downloads:
+  - 2-User-Setup.bat
+  - User-DriveMapper.ps1
+  - Deploy-Printers-Users.ps1
+  - README.txt
+
+Then automatically runs 2-User-Setup.bat
+
+Manual Install (Complete):
+-----------------------------------------------------------
+Admin Setup (Internal):
+  1. Copy admin files to C:\IT\Admin\
+  2. Run 1-Admin-Setup.bat as Administrator
+
+User Setup (Can be from GitHub):
+  1. Run GitHub install command above
+  OR
+  2. Copy user files to C:\IT\UserSetup\
+  3. Run 2-User-Setup.bat
+
+================================================================
+FILE RELATIONSHIPS
+================================================================
+
+ADMIN SIDE:
+  1-Admin-Setup.bat
+    ├─> Setup-PrintServer-Admin.ps1
+    └─> Admin-DriveConfig.ps1
+
+USER SIDE:
+  2-User-Setup.bat
+    ├─> Deploy-Printers-Users.ps1
+    └─> User-DriveMapper.ps1
+
+COMPLETELY SEPARATED - NO SHARED FILES!
+
+================================================================
+SECURITY BENEFITS
+================================================================
+
+[OK] No admin code on public GitHub
+[OK] Admin registry keys kept private
+[OK] Users cannot accidentally modify admin settings
+[OK] Clear separation of privileges
+[OK] Easier to audit what's public vs private
+
+================================================================
+CODE CHANGES SUMMARY
+================================================================
+
+Admin-DriveConfig.ps1 (NEW):
+  - Lines 35-61 from Mount-Network-Drives.ps1
+  - Admin registry fixes only
+  - Stand-alone admin script
+
+User-DriveMapper.ps1 (NEW):
+  - Mount-Network-Drives.ps1 WITHOUT lines 35-61
+  - All user functionality preserved
+  - No admin code
+
+1-Admin-Setup.bat (MODIFIED):
+  - Now calls Admin-DriveConfig.ps1
+  - Instead of inline PowerShell
+
+2-User-Setup.bat (MODIFIED):
+  - Now calls User-DriveMapper.ps1
+  - Instead of Mount-Network-Drives.ps1
+
+install.ps1 (MODIFIED):
+  - Downloads User-DriveMapper.ps1
+  - Downloads 2-User-Setup.bat
+  - No admin files
+
+Mount-Network-Drives.ps1 (DEPRECATED):
+  - Old shared file
+  - No longer used
+  - Can be deleted
+
+================================================================
+TESTING THE SPLIT
+================================================================
+
+Test Admin Files (Internal PC):
+  1. Copy: 1-Admin-Setup.bat, Setup-PrintServer-Admin.ps1, Admin-DriveConfig.ps1
+  2. Right-click 1-Admin-Setup.bat -> Run as administrator
+  3. Should configure printer trust and drive registry
+  4. No errors
+
+Test User Files (Can be from GitHub):
+  1. Download from GitHub using install.ps1
+  OR
+  2. Copy: 2-User-Setup.bat, Deploy-Printers-Users.ps1, User-DriveMapper.ps1
+  3. Double-click 2-User-Setup.bat as regular user
+  4. Should prompt for credentials
+  5. Should install printers and map drives
+  6. No errors
+
+Verify Separation:
+  1. Check User-DriveMapper.ps1 has NO admin registry code
+  2. Check Admin-DriveConfig.ps1 has ONLY registry code
+  3. Verify both scripts work independently
+
+================================================================
+VERIFICATION CHECKLIST
+================================================================
+
+[ ] Admin-DriveConfig.ps1 contains ONLY registry settings
+[ ] User-DriveMapper.ps1 contains NO admin code
+[ ] 1-Admin-Setup.bat calls correct admin scripts
+[ ] 2-User-Setup.bat calls correct user scripts
+[ ] install.ps1 downloads only user files
+[ ] GitHub repo contains NO admin files
+[ ] Both admin and user workflows tested successfully
+
+================================================================
+DEPLOYMENT WORKFLOW
+================================================================
+
+Step 1: Setup Admin Files (IT Staff)
+  1. Keep admin files on internal network share
+  2. Deploy to PCs as needed
+  3. Run once per PC
+
+Step 2: Deploy User Files (End Users)
+  OPTION A: GitHub
+    Users run: irm https://github.com/.../install.ps1 | iex
+  
+  OPTION B: Network Share
+    Users run: \\VORTEXFS\IT\UserSetup\2-User-Setup.bat
+  
+  OPTION C: Email Link
+    Email users link to GitHub or network share
+
+Step 3: Support
+  - Admin issues: Check admin logs and registry
+  - User issues: Check C:\VortexLogs\ and credentials
+
+================================================================
+END OF FILE ORGANIZATION GUIDE
+================================================================
