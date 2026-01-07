@@ -1,148 +1,332 @@
 ================================================================
-VORTEX SYSTEMS - Network Drive Mapper
-Version 2.0
+VORTEX SYSTEMS - User Setup Package
+Network Drives + Printers
 ================================================================
 
 QUICK START:
-1. Copy all files to C:\scripts\
-2. Right-click "Quick-Setup.bat" -> Run as administrator
-3. Enter your username and password
-4. Reboot when prompted
-5. Done! Drives reconnect automatically.
+1. Run "2-User-Setup.bat" (as regular user, NOT administrator)
+2. Enter your username and password when prompted
+3. Follow the prompts
+4. Reboot when asked
+5. Done! Your printers and drives are ready.
 
 ================================================================
-FILES:
+WHAT THIS PACKAGE DOES:
 ================================================================
 
-Mount-Network-Drives.ps1    - Main script
-Mount-Drives.bat            - Menu launcher (4 options)
-Quick-Setup.bat             - One-click setup (RECOMMENDED)
-README.txt                  - This file
+PART 1: Installs Your Printers
+  - SHOP-PRNT (if authorized)
+  - SHOP-CLR-PRNT (if authorized)
+  - MGNT-PRNT (if authorized)
+  - LOBBY-PRNT (if authorized)
+  - Canon-TM-305 Plotter (if authorized)
 
-================================================================
-WHAT IT DOES:
-================================================================
-
-Maps these drives:
-  U: BUSINESS
-  O: EMPLOYEE
-  R: ENGINEERING RECORDS
-  Q: ENGINEERING
-  N: FINANCE-HR
-  S: SOFTWARE
-  V: VORTEX
-  P: Personal folder (your EMPLOYEE$\username)
-
-Special (if you have permission):
-  T: Quotations
-  I: Crib Catalog
+PART 2: Maps Your Network Drives
+  - U: BUSINESS
+  - O: EMPLOYEE
+  - R: ENGINEERING RECORDS
+  - Q: ENGINEERING
+  - N: FINANCE-HR
+  - S: SOFTWARE
+  - V: VORTEX
+  - P: Personal folder (your EMPLOYEE$\username)
+  - T: Quotations (if authorized)
+  - I: Crib Catalog (if authorized)
 
 Also:
-  [OK] Fixes trust relationship
-  [OK] Enables network wait at boot (no red X icons!)
-  [OK] Stores credentials securely
-  [OK] Auto-reconnect after reboot
+  [OK] Stores your credentials securely
+  [OK] Configures auto-reconnect for drives
+  [OK] Prompts for reboot
 
 ================================================================
-MENU OPTIONS:
+FILES INCLUDED:
 ================================================================
 
-1. Map My Drives
-   - Maps all accessible drives
-   - Stores credentials
-   - Configures persistence
+2-User-Setup.bat
+  - Main launcher (double-click this!)
+  - Runs as regular user
+  - Guides you through setup
 
-2. Update Password
-   - Updates stored password
-   - Refreshes all drives
-   - Use when password changes
+User-DriveMapper.ps1
+  - Drive mapping script
+  - Called automatically by 2-User-Setup.bat
 
-3. Fix Connection Issues
-   - Fixes trust relationship
-   - Solves repeated password prompts
-   - Requires reboot
+Deploy-Printers-Users.ps1
+  - Printer deployment script
+  - Called automatically by 2-User-Setup.bat
 
-4. Remove Everything
-   - Removes all drives
-   - Clears credentials
-   - Complete cleanup
+README.txt
+  - This file
+
+install.ps1
+  - GitHub installer (if downloading from GitHub)
 
 ================================================================
-NETWORK WAIT AT BOOT:
+IMPORTANT NOTES:
 ================================================================
 
-When run as administrator, the script enables Windows to wait
-for network before desktop loads. This means:
+Run as REGULAR USER:
+  - Do NOT run as administrator
+  - Just double-click 2-User-Setup.bat
+  - You'll be prompted for credentials
 
-  [OK] No red X icons at startup
-  [OK] Drives ready when desktop appears
-  [OK] No 30-60 second delay
+Credentials Required:
+  - You'll enter username and password TWICE
+  - Once for printers
+  - Once for drives
+  - Same credentials both times (your domain account)
+  - Format: Just "username" (no VORTEX-SYSTEMS\ prefix)
 
-This is a registry setting, NOT a startup script.
-No scripts run at boot - just a Windows configuration change.
+Prerequisites:
+  - IT must have run admin setup on this PC first
+  - PC must be on network or VPN
+  - You need valid domain credentials
+
+Reboot Required:
+  - Printers work immediately
+  - Drives work after reboot
+  - Drives will auto-reconnect at every login
+
+================================================================
+WHAT HAPPENS DURING SETUP:
+================================================================
+
+Step 1: Printer Installation
+  1. Prompts for username
+  2. Prompts for password
+  3. Stores credentials securely
+  4. Attempts to install all printers
+  5. You get only printers you're authorized for
+  6. Press any key to continue
+
+Step 2: Drive Mapping
+  1. Prompts for username again
+  2. Prompts for password again
+  3. Tests your credentials
+  4. Maps accessible drives
+  5. Configures auto-reconnect
+  6. Asks if you want to reboot
+
+Step 3: Reboot
+  1. Choose to reboot now or later
+  2. After reboot, drives reconnect automatically
+  3. Done!
+
+Takes 2-3 minutes total.
 
 ================================================================
 TROUBLESHOOTING:
 ================================================================
 
 "Invalid credentials" error:
-  -> Verify username (no domain, just username)
-  -> Verify password
+  -> Enter username WITHOUT domain prefix
+  -> Just "username", not "VORTEX-SYSTEMS\username"
+  -> Check password is correct
+  -> Verify account is not locked
+
+"Cannot reach server" error:
   -> Check VPN connection
+  -> Verify you're on corporate network
+  -> Test: ping VORTEXFS.hq.vortex-systems.com
 
-Drives show red X at startup:
-  -> Run Quick-Setup.bat as administrator
-  -> Reboot
+"Some printers skipped" message:
+  -> This is NORMAL
+  -> You only get printers you're authorized for
+  -> Contact IT to request access to additional printers
 
-Password prompts keep appearing:
-  -> Run Option 3 (Fix Connection Issues)
-  -> Reboot
+"Some drives skipped" message:
+  -> This is NORMAL
+  -> You only get drives you're authorized for
+  -> Most users get U:, O:, R:, Q:, N:, S:, V:, P:
+  -> Special drives T: and I: require additional authorization
 
-Special shares not mapping:
-  -> Contact IT - you need AD group membership
-  -> T: requires FS_SP_BUSS_0-Quotations_RW
-  -> I: requires FS_SP_VTX_Crib-Catalog_RW
+"Script won't run" error:
+  -> Make sure you're NOT running as administrator
+  -> Run as regular user
+  -> Right-click should show "Run as administrator" option
+  -> Just double-click normally instead
 
 Drives don't reconnect after reboot:
-  -> Verify you ran as administrator
-  -> Reboot if you haven't
-  -> Run Quick-Setup.bat again
+  -> Verify IT ran admin setup first
+  -> Check that you rebooted after setup
+  -> Re-run 2-User-Setup.bat if needed
+
+Need to update password:
+  -> Just run 2-User-Setup.bat again
+  -> Enter new password when prompted
+  -> It will update stored credentials
 
 ================================================================
-FOR IT STAFF:
+PRINTER PERMISSIONS:
 ================================================================
 
-Deployment:
-  1. Copy files to C:\scripts\ on each PC
-  2. User runs Quick-Setup.bat as administrator
-  3. User enters credentials
-  4. System reboots
-  5. Drives ready at next login
+Your printers are determined by AD group membership:
 
-What gets configured:
-  * Network drives with persistence
-  * Credentials in Windows Credential Manager
-  * Trust relationship (Local Intranet Zone)
-  * Network wait at boot (RestoreConnection = 1)
-  * Enhanced registry persistence
+Shop Printers:
+  - PRNT_SP_SHOP-PRNT_PO -> SHOP-PRNT
+  - PRNT_SP_SHOP-CLR-PRNT_PO -> SHOP-CLR-PRNT
 
-No startup components:
-  * No scheduled tasks
-  * No startup scripts
-  * No services
-  * Just registry settings
+Office Printers:
+  - PRNT_SP_MGNT-PRNT_PO -> MGNT-PRNT
+  - PRNT_SP_LOBBY-PRNT_PO -> LOBBY-PRNT
 
-Server: VORTEXFS.hq.vortex-systems.com
-Logs: C:\VortexLogs\
+Engineering:
+  - PRNT_PLOTTER_PO -> Canon-TM-305
+
+IT Admin:
+  - PRNT_ALL-PRNT_FC -> All printers
+
+Contact IT to request access to additional printers.
+
+================================================================
+DRIVE PERMISSIONS:
+================================================================
+
+Standard Drives (Everyone):
+  U:, O:, R:, Q:, N:, S:, V:, P:
+
+Special Drives (Require Authorization):
+  T: Quotations
+     Requires: FS_SP_BUSS_0-Quotations_RW
+     
+  I: Crib Catalog
+     Requires: FS_SP_VTX_Crib-Catalog_RW
+
+Contact IT to request access to special drives.
+
+================================================================
+MULTI-USER PC:
+================================================================
+
+If multiple people use this PC:
+  - Each user runs 2-User-Setup.bat separately
+  - Each user enters their own credentials
+  - Each user gets their own printers and drives
+  - Users don't interfere with each other
+
+Example:
+  User 1 logs in -> Runs setup -> Gets their printers/drives
+  User 2 logs in -> Runs setup -> Gets their printers/drives
+  Both configurations work independently!
+
+================================================================
+RUNNING FROM GITHUB:
+================================================================
+
+If downloading from GitHub, use this one-liner:
+
+irm https://raw.githubusercontent.com/USERNAME/REPO/main/install.ps1 | iex
+
+This will:
+  1. Download all files to C:\scripts\
+  2. Automatically run 2-User-Setup.bat
+  3. Prompt you for credentials
+  4. Configure everything
+
+Replace USERNAME and REPO with actual GitHub details.
+
+================================================================
+LOGS AND VERIFICATION:
+================================================================
+
+After Setup:
+  - Check printers: Control Panel -> Devices and Printers
+  - Check drives: File Explorer -> This PC
+  - Check logs: C:\VortexLogs\DriveMapper_*.log
+
+Verify Printers:
+  - Open "Devices and Printers"
+  - Look for: SHOP-PRNT, MGNT-PRNT, etc.
+  - You only see printers you have access to
+
+Verify Drives:
+  - Open File Explorer
+  - Look in "This PC" or "Computer"
+  - Should see: U:, O:, R:, Q:, N:, S:, V:, P:
+  - May also see: T:, I: (if authorized)
+
+Verify Auto-Reconnect:
+  - Reboot your PC
+  - After login, check File Explorer
+  - Drives should be there (no red X)
+  - If drives aren't there, check logs
+
+================================================================
+UPDATING LATER:
+================================================================
+
+Password Changed:
+  - Run 2-User-Setup.bat again
+  - Enter new password
+  - It will update stored credentials
+
+Lost Access to Printer/Drive:
+  - Run 2-User-Setup.bat again
+  - It will remove unauthorized items
+
+Gained Access to New Printer/Drive:
+  - Log out and log back in (to refresh groups)
+  - Run 2-User-Setup.bat again
+  - New items will be added
+
+PC Reimaged:
+  - Run 2-User-Setup.bat again
+  - Enter credentials
+  - Everything will be reconfigured
 
 ================================================================
 SUPPORT:
 ================================================================
 
-If problems persist:
-  1. Check logs: C:\VortexLogs\DriveMapper_*.log
-  2. Verify VPN/network connection
-  3. Test: ping VORTEXFS.hq.vortex-systems.com
-  4. Contact IT with computer name and log file
+For Access Requests:
+  - Contact IT to request printer/drive access
+  - Provide: Your username, what you need access to
 
+For Technical Issues:
+  - Check this README first
+  - Check logs: C:\VortexLogs\DriveMapper_*.log
+  - Contact IT with:
+    * Your username
+    * Computer name
+    * Error message
+    * Log file
+
+IT Contact:
+  martin@vortex-systems.com
+
+================================================================
+SECURITY:
+================================================================
+
+Your credentials are stored securely:
+  - Windows Credential Manager (encrypted)
+  - Per-user (other users can't access)
+  - Same security as Windows password storage
+
+What's stored:
+  - Your username
+  - Your password (encrypted)
+
+What's NOT stored:
+  - No credentials in plain text
+  - No credentials in scripts
+  - No shared credentials between users
+
+Your data is protected by:
+  - Windows DPAPI encryption
+  - Per-user credential isolation
+  - Server-side permission enforcement
+
+================================================================
+VERSION:
+================================================================
+
+Package: User Setup (Printers + Drives)
+Version: 2.0
+Updated: December 2024
+
+For the latest version, check with IT or download from GitHub.
+
+================================================================
+END OF README
 ================================================================
