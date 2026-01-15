@@ -123,11 +123,25 @@ function Test-WriteAccess {
 
 # Function to get user AD groups via LDAP
 function Get-UserADGroups {
-    param([string]$Username)
+    param(
+        [string]$Username,
+        [string]$Password,
+        [string]$Domain = "hq.vortex-systems.com"
+    )
     
     try {
-        $searcher = New-Object System.DirectoryServices.DirectorySearcher
-        $searcher.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://hq.vortex-systems.com")
+        # Create credentials for LDAP authentication (needed from workgroup PCs)
+        $ldapUser = "$Domain\$Username"
+        
+        # Connect to LDAP with authentication
+        $ldapPath = "LDAP://$Domain"
+        $directoryEntry = New-Object System.DirectoryServices.DirectoryEntry($ldapPath, $ldapUser, $Password)
+        
+        # Test connection
+        $null = $directoryEntry.NativeGuid
+        
+        # Create searcher with authenticated connection
+        $searcher = New-Object System.DirectoryServices.DirectorySearcher($directoryEntry)
         $searcher.Filter = "(&(objectCategory=person)(objectClass=user)(sAMAccountName=$Username))"
         $searcher.PropertiesToLoad.Add("memberOf") | Out-Null
         
@@ -140,10 +154,15 @@ function Get-UserADGroups {
                 }
             }
             Write-Log "Found $($groups.Count) AD groups for $Username"
+            Write-Host "[INFO] Found $($groups.Count) AD groups for user" -ForegroundColor Gray
             return $groups
+        } else {
+            Write-Log "No user found in AD for $Username" "WARNING"
+            Write-Host "[WARNING] Could not find user in Active Directory" -ForegroundColor Yellow
         }
     } catch {
         Write-Log "AD group lookup failed: $($_.Exception.Message)" "WARNING"
+        Write-Host "[WARNING] Could not query AD groups: $($_.Exception.Message)" -ForegroundColor Yellow
     }
     return @()
 }
@@ -457,7 +476,7 @@ if ($Option -eq "1") {
     
     Write-Host ""
     Write-Host "Checking permissions..." -ForegroundColor Cyan
-    $userGroups = Get-UserADGroups -Username $username
+    $userGroups = Get-UserADGroups -Username $username -Password $password -Domain $Domain
     
     $accessibleSpecialShares = @()
     foreach ($share in $SpecialShares) {
