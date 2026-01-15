@@ -269,10 +269,12 @@ function Map-NetworkDrive {
             net use $DriveLetter /delete /yes 2>&1 | Out-Null
         }
         
+        # Store credentials using cmdkey (handles special characters automatically)
         cmdkey /add:$ServerFQDN /user:$UserUPN /pass:$Password 2>&1 | Out-Null
         cmdkey /add:$UNCPath /user:$UserUPN /pass:$Password 2>&1 | Out-Null
         
-        $result = net use $DriveLetter $UNCPath /user:$UserUPN $Password /persistent:yes 2>&1
+        # Map drive using stored credentials (no password in command line)
+        $result = net use $DriveLetter $UNCPath /persistent:yes 2>&1
         
         if ($LASTEXITCODE -ne 0) {
             throw "net use failed: $result"
@@ -418,9 +420,12 @@ if ($Option -eq "1") {
         Write-Host ""
         Write-Host "Testing credentials..." -ForegroundColor Cyan
         
-        # Try to connect to first share as a test
+        # Store credentials temporarily for test
         $testPath = $Shares[0].Path
-        $testResult = net use * $testPath /user:$upn $password 2>&1
+        cmdkey /add:$ServerFQDN /user:$upn /pass:$password 2>&1 | Out-Null
+        
+        # Try to connect using stored credentials
+        $testResult = net use * $testPath 2>&1
         
         if ($LASTEXITCODE -ne 0) {
             Write-Host ""
@@ -558,8 +563,12 @@ elseif ($Option -eq "2") {
     Write-Host ""
     Write-Host "Testing new credentials..." -ForegroundColor Cyan
     
+    # Store credentials temporarily for test
     $testPath = $Shares[0].Path
-    $testResult = net use * $testPath /user:$upn $password 2>&1
+    cmdkey /add:$ServerFQDN /user:$upn /pass:$password 2>&1 | Out-Null
+    
+    # Try to connect using stored credentials
+    $testResult = net use * $testPath 2>&1
     
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""
@@ -590,8 +599,11 @@ elseif ($Option -eq "2") {
             
             net use $letter /delete /yes 2>&1 | Out-Null
             
+            # Store credentials for this path
             cmdkey /add:$path /user:$upn /pass:$password 2>&1 | Out-Null
-            net use $letter $path /user:$upn $password /persistent:yes 2>&1 | Out-Null
+            
+            # Reconnect using stored credentials
+            net use $letter $path /persistent:yes 2>&1 | Out-Null
             
             Write-Host "[OK] Updated $letter" -ForegroundColor Green
         } catch {
