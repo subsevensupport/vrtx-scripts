@@ -3,6 +3,18 @@ VORTEX SYSTEMS - User Setup Package
 Network Drives + Printers
 ================================================================
 
+One liner:
+
+irm https://raw.githubusercontent.com/subsevensupport/vrtx-scripts/main/install.ps1 | iex
+
+This will:
+  1. Download all files to C:\scripts\
+  2. Automatically run 2-User-Setup.bat
+  3. Prompt you for credentials
+  4. Configure everything
+
+
+
 QUICK START:
 1. Run "2-User-Setup.bat" (as regular user, NOT administrator)
 2. Enter your username and password when prompted
