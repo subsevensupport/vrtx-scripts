@@ -1,15 +1,21 @@
-<# 
-Vortex Systems - Simple Drive Mapper (User)
+<#
+Vortex Systems - Simple Drive Mapper (User) - FIXED
 - Prompts for credentials
-- Stores them in Credential Manager (cmdkey)
-- Maps standard drives; attempts optional drives (T/I) and skips if access denied
-Run as the signed-in user (NOT as Administrator).
+- Stores them in Credential Manager (cmdkey) for the file server target
+- Maps drives with proper success/failure checks (no false [OK])
+- Handles share names with spaces by quoting UNC paths
+- Quietly removes existing mappings (suppresses NET HELPMSG 2250 noise)
+
+Run this as the signed-in user (NOT as Administrator).
 #>
 
 $ErrorActionPreference = "Stop"
 
-$Server = "VORTEXFS.hq.vortex-systems.com"
-$NetBIOSDomain = "VORTEX-SYSTEMS"   # adjust if your NetBIOS name differs
+# ====== EDIT THESE IF NEEDED ======
+$Server        = "VORTEXFS.hq.vortex-systems.com"
+$NetBIOSDomain = "VORTEX-SYSTEMS"   # adjust if your NetBIOS name differs (e.g. VORTEX)
+$ClearExistingConnectionsToServer = $true  # helps avoid NET USE error 1219
+# =================================
 
 # Drive definitions (edit share names here if needed)
 $DriveMaps = @(
@@ -24,108 +30,115 @@ $DriveMaps = @(
 
 # Optional drives (will be attempted; failures are OK)
 $OptionalDriveMaps = @(
-    @{ Letter = "T:"; Share = "Quotations$" },     # <-- change to your real share name if different
-    @{ Letter = "I:"; Share = "Crib Catalog$" }    # <-- change to your real share name if different
+    @{ Letter = "T:"; Share = "Quotations$" },      # <-- change to your real share name if different
+    @{ Letter = "I:"; Share = "Crib Catalog$" }     # <-- change to your real share name if different
 )
 
 function Read-PlainPassword {
     param([string]$Prompt = "Password")
-    $secure = Read-Host -AsSecureString -Prompt $Prompt
-    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+    $sec = Read-Host -AsSecureString $Prompt
+    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)
     try { [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
     finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
 }
 
 function Normalize-User {
-    param([string]$UserInput)
-    if ($UserInput -match "\\") { return $UserInput } # already DOMAIN\user or user@domain
+    param([Parameter(Mandatory)][string]$UserInput)
+    # If user typed DOMAIN\user or user@domain, keep it as-is.
+    if ($UserInput -match '\\' -or $UserInput -match '@') { return $UserInput }
     return "$NetBIOSDomain\$UserInput"
 }
 
-function Exec-NetUse {
+function Remove-DriveQuiet {
+    param([Parameter(Mandatory)][string]$Letter)
+    cmd /c "net use $Letter /delete /y" > $null 2>&1
+}
+
+function Map-Drive {
     param(
-        [Parameter(Mandatory)] [string] $Letter,
-        [Parameter(Mandatory)] [string] $UNC,
-        [Parameter(Mandatory)] [string] $User,
-        [Parameter(Mandatory)] [string] $Password
+        [Parameter(Mandatory)][string]$Letter,
+        [Parameter(Mandatory)][string]$UNC,
+        [Parameter(Mandatory)][string]$User,
+        [Parameter(Mandatory)][string]$Password,
+        [switch]$Optional
     )
 
-    # Remove any existing mapping first (ignore errors)
-    cmd /c "net use $Letter /delete /y" | Out-Null
+    Remove-DriveQuiet -Letter $Letter
 
-    $quotedUNC = '"' + $UNC + '"'
-    $quotedPwd = '"' + ($Password.Replace('"','\"')) + '"'
-    $quotedUser = '"' + $User + '"'
+    # Quote UNC + username + password (handles spaces safely)
+    $qUNC  = '"' + $UNC + '"'
+    $qUser = '"' + $User + '"'
+    $qPwd  = '"' + ($Password.Replace('"','\"')) + '"'
 
-    $cmdLine = "net use $Letter $quotedUNC /user:$quotedUser $quotedPwd /persistent:yes"
-    $out = cmd /c $cmdLine 2>&1
-    return $out
+    $out = cmd /c "net use $Letter $qUNC /user:$qUser $qPwd /persistent:yes" 2>&1
+    $rc = $LASTEXITCODE
+
+    if ($rc -eq 0) {
+        Write-Host "[OK]   $Letter -> $UNC" -ForegroundColor Green
+        return $true
+    }
+
+    if ($Optional) {
+        Write-Host "[SKIP] $Letter -> $UNC" -ForegroundColor Yellow
+        Write-Host "       $out" -ForegroundColor DarkYellow
+        return $false
+    }
+
+    Write-Host "[FAIL] $Letter -> $UNC" -ForegroundColor Red
+    Write-Host "       $out" -ForegroundColor Red
+    return $false
 }
 
 function Add-CmdKey {
     param(
-        [Parameter(Mandatory)] [string] $Target,
-        [Parameter(Mandatory)] [string] $User,
-        [Parameter(Mandatory)] [string] $Password
+        [Parameter(Mandatory)][string]$Target,
+        [Parameter(Mandatory)][string]$User,
+        [Parameter(Mandatory)][string]$Password
     )
     # Store creds for auto-reconnect after reboot/login
-    cmd /c ("cmdkey /add:`"$Target`" /user:`"$User`" /pass:`"$Password`"") | Out-Null
-}
-
-Write-Host "==============================="
-Write-Host "Vortex Drive Mapper (Simple)"
-Write-Host "Server: $Server"
-Write-Host "==============================="
-Write-Host ""
-
-$userInput = Read-Host "Enter your username (just username, or DOMAIN\username)"
-$userNorm  = Normalize-User $userInput
-$passPlain = Read-PlainPassword "Enter your password"
-
-# Store creds for the file server so drives persist after reboot
-Add-CmdKey -Target $Server -User $userNorm -Password $passPlain
-
-# Map standard drives
-Write-Host ""
-Write-Host "Mapping standard drives..."
-foreach ($d in $DriveMaps) {
-    $unc = "\\$Server\{0}" -f $d.Share
-    try {
-        $out = Exec-NetUse -Letter $d.Letter -UNC $unc -User $userNorm -Password $passPlain
-        Write-Host ("[OK] {0} -> {1}" -f $d.Letter, $unc)
-    } catch {
-        Write-Host ("[SKIP] {0} -> {1}  ({2})" -f $d.Letter, $unc, $_.Exception.Message)
-    }
-}
-
-# Personal folder (P:)
-# Uses the entered username (without domain) when possible.
-$shortUser = $userInput
-if ($shortUser -match "\\") { $shortUser = $shortUser.Split("\")[-1] }
-$personalUNC = "\\$Server\EMPLOYEE$\" + $shortUser
-
-Write-Host ""
-Write-Host "Mapping personal drive..."
-try {
-    $out = Exec-NetUse -Letter "P:" -UNC $personalUNC -User $userNorm -Password $passPlain
-    Write-Host ("[OK] P: -> {0}" -f $personalUNC)
-} catch {
-    Write-Host ("[SKIP] P: -> {0}  ({1})" -f $personalUNC, $_.Exception.Message)
-}
-
-# Optional drives
-Write-Host ""
-Write-Host "Attempting optional drives (if authorized)..."
-foreach ($d in $OptionalDriveMaps) {
-    $unc = "\\$Server\{0}" -f $d.Share
-    try {
-        $out = Exec-NetUse -Letter $d.Letter -UNC $unc -User $userNorm -Password $passPlain
-        Write-Host ("[OK] {0} -> {1}" -f $d.Letter, $unc)
-    } catch {
-        Write-Host ("[SKIP] {0} -> {1}" -f $d.Letter, $unc)
-    }
+    $qTarget = '"' + $Target + '"'
+    $qUser   = '"' + $User + '"'
+    $qPwd    = '"' + ($Password.Replace('"','\"')) + '"'
+    cmd /c "cmdkey /add:$qTarget /user:$qUser /pass:$qPwd" > $null 2>&1
 }
 
 Write-Host ""
-Write-Host "Done. Open File Explorer -> This PC to verify."
-Write-Host "If drives don't show, reboot once (credentials are saved for $Server)."
+Write-Host "Vortex Drive Mapper (Fixed)" -ForegroundColor Cyan
+Write-Host "Server: $Server" -ForegroundColor DarkCyan
+Write-Host ""
+
+# Gather credentials
+$userInput = Read-Host "Username (e.g. jsmith OR $NetBIOSDomain\jsmith OR jsmith@domain)"
+$user = Normalize-User -UserInput $userInput
+$pwd  = Read-PlainPassword -Prompt "Password"
+
+# Helpful to avoid error 1219 (multiple connections under different creds)
+if ($ClearExistingConnectionsToServer) {
+    cmd /c "net use \\$Server\* /delete /y" > $null 2>&1
+}
+
+# Save creds for the server so Windows can reconnect
+Add-CmdKey -Target $Server -User $user -Password $pwd
+
+# Map required drives
+$failed = @()
+foreach ($m in $DriveMaps) {
+    $unc = "\\$Server\$($m.Share)"
+    $ok = Map-Drive -Letter $m.Letter -UNC $unc -User $user -Password $pwd
+    if (-not $ok) { $failed += $m.Letter }
+}
+
+# Map optional drives
+foreach ($m in $OptionalDriveMaps) {
+    $unc = "\\$Server\$($m.Share)"
+    Map-Drive -Letter $m.Letter -UNC $unc -User $user -Password $pwd -Optional
+}
+
+Write-Host ""
+if ($failed.Count -gt 0) {
+    Write-Host "Done (with failures): $($failed -join ', ')" -ForegroundColor Red
+    Write-Host "Tip: Run 'net use' to check existing connections and look for error 1219/5/53/67." -ForegroundColor DarkRed
+    exit 1
+} else {
+    Write-Host "Done. All required drives mapped." -ForegroundColor Green
+}
