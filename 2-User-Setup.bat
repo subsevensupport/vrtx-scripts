@@ -6,7 +6,8 @@ REM Run this as a REGULAR USER (not administrator)
 REM 
 REM This configures:
 REM   1. Your network printers
-REM   2. Your network drives (U:, O:, R:, Q:, N:, S:, V:, P:, T:, I:)
+REM   2. Your standard network drives (U:, O:, R:, Q:, N:, S:, V:, P:)
+REM   3. Your special shares (T:, I:) - if you have permission
 REM
 REM Prerequisites: IT must have run "1-Admin-Setup.bat" first
 REM ============================================================================
@@ -19,7 +20,8 @@ echo ===========================================================================
 echo.
 echo This script will configure:
 echo   - Your network printers (based on your permissions)
-echo   - Your network drives (based on your permissions)
+echo   - Your standard network drives (U:, O:, R:, Q:, N:, S:, V:, P:)
+echo   - Your special shares (T: Quotations, I: Crib) - if authorized
 echo.
 echo Run this as a REGULAR USER (do NOT run as administrator)
 echo.
@@ -39,7 +41,7 @@ REM ============================================================================
 
 echo.
 echo ============================================================================
-echo  STEP 1 of 2: Installing Your Printers
+echo  STEP 1 of 3: Installing Your Printers
 echo ============================================================================
 echo.
 echo You will be prompted for your domain username and password.
@@ -70,13 +72,15 @@ pause >nul
 cls
 
 REM ============================================================================
-REM STEP 2: Map Network Drives
+REM STEP 2: Map Standard Network Drives
 REM ============================================================================
 
 echo.
 echo ============================================================================
-echo  STEP 2 of 2: Mapping Your Network Drives
+echo  STEP 2 of 3: Mapping Your Standard Network Drives
 echo ============================================================================
+echo.
+echo Mapping: U:, O:, R:, Q:, N:, S:, V:, P:
 echo.
 echo You will be prompted for your username and password again.
 echo (This is separate from printer credentials)
@@ -88,7 +92,7 @@ if exist "%~dp0User-DriveMapper.ps1" (
     
     REM Check if script succeeded
     if %errorlevel% equ 0 (
-        echo [OK] Drive mapping complete
+        echo [OK] Standard drives mapped successfully
     ) else (
         echo [WARNING] Some drives may not have mapped
         echo          Check your credentials and network connection
@@ -101,22 +105,75 @@ if exist "%~dp0User-DriveMapper.ps1" (
 
 echo ============================================================================
 echo.
+echo Press any key to continue to special shares...
+pause >nul
+
+cls
+
+REM ============================================================================
+REM STEP 3: Map Special Shares (Optional)
+REM ============================================================================
+
+echo.
+echo ============================================================================
+echo  STEP 3 of 3: Mapping Special Shares
+echo ============================================================================
+echo.
+echo Attempting to map special shares:
+echo   - T: Quotations (requires FS_SP_BUSS_0-Quotations_RW group)
+echo   - I: Crib Catalog (requires FS_SP_VTX_Crib-Catalog_RW group)
+echo.
+echo Note: You will only get these drives if you have the required permissions.
+echo       If you don't have access, they will be skipped - this is normal!
+echo.
+
+if exist "%~dp0User-DriveMapper.ps1" (
+    powershell.exe -ExecutionPolicy Bypass -NoProfile -File "%~dp0User-DriveMapper.ps1" -Option "2"
+    echo.
+    
+    REM Check if script succeeded
+    if %errorlevel% equ 0 (
+        echo [OK] Special shares mapping complete
+    ) else (
+        echo [INFO] Special shares skipped (no permission or not needed)
+    )
+    echo.
+) else (
+    echo [WARNING] User-DriveMapper.ps1 not found - skipping special shares
+    echo.
+)
+
+cls
+
+echo.
+echo ============================================================================
+echo.
 echo                    USER SETUP COMPLETE
 echo.
 echo ============================================================================
 echo.
 echo What was configured:
 echo   [OK] Network printers installed (based on your permissions)
-echo   [OK] Network drives mapped (based on your permissions)
+echo   [OK] Standard network drives mapped (U:, O:, R:, Q:, N:, S:, V:, P:)
+echo   [OK] Special shares attempted (T:, I:) - you got what you have access to
 echo.
 echo Your printers:
 echo   - Check "Devices and Printers" in Control Panel
 echo   - You only see printers you have permission to use
 echo.
-echo Your drives:
-echo   - Check File Explorer for mapped drives
-echo   - Common drives: U:, O:, R:, Q:, N:, S:, V:, P:
-echo   - Special drives (if authorized): T:, I:
+echo Your standard drives:
+echo   - U: BUSINESS
+echo   - O: EMPLOYEE
+echo   - R: ENGINEERING RECORDS
+echo   - Q: ENGINEERING
+echo   - N: FINANCE-HR
+echo   - S: SOFTWARE
+echo   - V: VORTEX
+echo   - P: Personal
+echo.
+echo Your special shares (if authorized):
+echo   - T: Quotations (restricted)
+echo   - I: Crib Catalog (restricted)
 echo.
 echo Important:
 echo   - A REBOOT is recommended for all settings to take effect

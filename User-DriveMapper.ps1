@@ -1,8 +1,5 @@
 # =====================================================================
 #  Vortex Systems - Network Drive Mapper (SIMPLE)
-#  - Clears all sessions to server
-#  - Stores credentials
-#  - Removes existing shares before mapping
 # =====================================================================
 
 param([string]$Option)
@@ -10,15 +7,19 @@ param([string]$Option)
 $ServerFQDN = "VORTEXFS.hq.vortex-systems.com"
 $Domain = "hq.vortex-systems.com"
 
-# All shares
-$AllShares = @(
+# Standard shares (everyone)
+$StandardShares = @(
     @{Letter = "U:"; Path = "\\$ServerFQDN\BUSINESS$"; Name = "BUSINESS"},
     @{Letter = "O:"; Path = "\\$ServerFQDN\EMPLOYEE$"; Name = "EMPLOYEE"},
     @{Letter = "R:"; Path = "\\$ServerFQDN\ENGINEERING RECORDS$"; Name = "ENGINEERING RECORDS"},
     @{Letter = "Q:"; Path = "\\$ServerFQDN\ENGINEERING$"; Name = "ENGINEERING"},
     @{Letter = "N:"; Path = "\\$ServerFQDN\FINANCE-HR$"; Name = "FINANCE-HR"},
     @{Letter = "S:"; Path = "\\$ServerFQDN\SOFTWARE$"; Name = "SOFTWARE"},
-    @{Letter = "V:"; Path = "\\$ServerFQDN\VORTEX"; Name = "VORTEX"},
+    @{Letter = "V:"; Path = "\\$ServerFQDN\VORTEX"; Name = "VORTEX"}
+)
+
+# Special shares (restricted)
+$SpecialShares = @(
     @{Letter = "T:"; Path = "\\$ServerFQDN\0-quotations$"; Name = "Quotations"},
     @{Letter = "I:"; Path = "\\$ServerFQDN\crib-catalog$"; Name = "Crib Catalog"}
 )
@@ -31,10 +32,7 @@ function Get-StoredCreds {
             $props = Get-ItemProperty -Path $regPath
             if ($props.Username -and $props.Password) {
                 $password = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($props.Password))
-                return @{
-                    Username = $props.Username
-                    Password = $password
-                }
+                return @{Username = $props.Username; Password = $password}
             }
         }
     } catch {}
@@ -74,23 +72,51 @@ function Get-Creds {
     return @{Username = $username; Password = $password}
 }
 
-# Map a drive
+# Clear all existing connections
+function Clear-Sessions {
+    Write-Host "Clearing existing connections..." -ForegroundColor Cyan
+    
+    # Clear cmdkey stored credentials
+    cmdkey /delete:$ServerFQDN 2>&1 | Out-Null
+    
+    # Clear server sessions
+    net use \\$ServerFQDN /delete /yes 2>&1 | Out-Null
+    
+    foreach ($share in $StandardShares) {
+        if (Test-Path $share.Letter) {
+            net use $share.Letter /delete /yes 2>&1 | Out-Null
+        }
+    }
+    foreach ($share in $SpecialShares) {
+        if (Test-Path $share.Letter) {
+            net use $share.Letter /delete /yes 2>&1 | Out-Null
+        }
+    }
+    if (Test-Path "P:") {
+        net use P: /delete /yes 2>&1 | Out-Null
+    }
+    
+    Write-Host "[OK] Cleared" -ForegroundColor Green
+    Write-Host ""
+}
+
+# Map a drive using net use (credentials already stored via cmdkey)
 function Map-Drive {
-    param([string]$Letter, [string]$Path, [string]$Name, [string]$Username, [string]$Password)
+    param([string]$Letter, [string]$Path, [string]$Name)
     
     try {
-        $network = New-Object -ComObject WScript.Network
-        $network.MapNetworkDrive($Letter, $Path, $true, "$Domain\$Username", $Password)
-        Write-Host "[OK] $Letter -> $Name" -ForegroundColor Green
-        return $true
-    } catch {
-        if ($_.Exception.Message -match "access|denied|1326") {
-            Write-Host "[SKIP] $Letter -> $Name (no permission)" -ForegroundColor Yellow
-            Write-Error $_.Exception.Message
+        # Map using stored credentials
+        $result = net use $Letter $Path /persistent:yes 2>&1
+        
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "[OK] $Letter -> $Name" -ForegroundColor Green
+            return $true
         } else {
             Write-Host "[SKIP] $Letter -> $Name" -ForegroundColor Yellow
-            Write-Error $_.Exception.Message
+            return $false
         }
+    } catch {
+        Write-Host "[SKIP] $Letter -> $Name" -ForegroundColor Yellow
         return $false
     }
 }
@@ -103,77 +129,105 @@ if (-not $Option) {
     Write-Host "           VORTEX SYSTEMS - NETWORK DRIVE MAPPER" -ForegroundColor Cyan
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "  1. Map My Drives" -ForegroundColor White
-    Write-Host "  2. Remove All Drives" -ForegroundColor White
+    Write-Host "  1. Map Standard Drives (U, O, R, Q, N, S, V, P)" -ForegroundColor White
+    Write-Host "  2. Map Special Shares (T: Quotations, I: Crib)" -ForegroundColor White
+    Write-Host "  3. Remove All Drives" -ForegroundColor White
     Write-Host ""
-    $Option = Read-Host "Enter option (1-2)"
+    $Option = Read-Host "Enter option (1-3)"
 }
 
-# OPTION 1: MAP DRIVES
+# OPTION 1: MAP STANDARD DRIVES
 if ($Option -eq "1") {
     Write-Host ""
     Write-Host "================================================================" -ForegroundColor Cyan
-    Write-Host "                    MAPPING NETWORK DRIVES" -ForegroundColor Cyan
+    Write-Host "               MAPPING STANDARD DRIVES" -ForegroundColor Cyan
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host ""
     
-    # Get credentials
     $cred = Get-Creds
     $username = $cred.Username
     $password = $cred.Password
     
     Write-Host ""
-    Write-Host "Step 1: Clearing all existing sessions to server..." -ForegroundColor Cyan
+    Clear-Sessions
     
-    # CRITICAL: Clear ALL sessions to server to prevent "multiple connections" error
-    net use \\$ServerFQDN /delete /yes 2>&1 | Out-Null
-    
-    # Also disconnect all drive letters
-    foreach ($share in $AllShares) {
-        if (Test-Path $share.Letter) {
-            net use $share.Letter /delete /yes 2>&1 | Out-Null
-        }
-    }
-    if (Test-Path "P:") {
-        net use P: /delete /yes 2>&1 | Out-Null
-    }
-    
-    Write-Host "[OK] All existing connections cleared" -ForegroundColor Green
-    
+    # Store credentials once using cmdkey (handles special characters)
+    Write-Host "Storing credentials..." -ForegroundColor Cyan
+    cmdkey /add:$ServerFQDN /user:"$Domain\$username" /pass:$password 2>&1 | Out-Null
+    Write-Host "[OK] Credentials stored" -ForegroundColor Green
     Write-Host ""
-    Write-Host "Step 2: Mapping drives..." -ForegroundColor Cyan
+    
+    Write-Host "Mapping standard drives..." -ForegroundColor Cyan
     Write-Host ""
     
     $successCount = 0
     
-    # Map all shares
-    foreach ($share in $AllShares) {
-        if (Map-Drive -Letter $share.Letter -Path $share.Path -Name $share.Name -Username $username -Password $password) {
+    foreach ($share in $StandardShares) {
+        if (Map-Drive -Letter $share.Letter -Path $share.Path -Name $share.Name) {
             $successCount++
         }
         Start-Sleep -Milliseconds 200
     }
     
-    # Map personal folder
     Write-Host ""
     Write-Host "Mapping personal folder..." -ForegroundColor Cyan
     $personalPath = "\\$ServerFQDN\EMPLOYEE$\$username"
-    if (Map-Drive -Letter "P:" -Path $personalPath -Name "Personal" -Username $username -Password $password) {
+    if (Map-Drive -Letter "P:" -Path $personalPath -Name "Personal") {
         $successCount++
     }
     
     Write-Host ""
     Write-Host "================================================================" -ForegroundColor Cyan
-    Write-Host "                         COMPLETE" -ForegroundColor Cyan
-    Write-Host "================================================================" -ForegroundColor Cyan
-    Write-Host ""
     Write-Host "Drives mapped: $successCount" -ForegroundColor Green
-    Write-Host "Credentials stored for next time" -ForegroundColor Green
+    Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host ""
 }
 
-# OPTION 2: REMOVE ALL
+# OPTION 2: MAP SPECIAL SHARES
 elseif ($Option -eq "2") {
+    Write-Host ""
+    Write-Host "================================================================" -ForegroundColor Cyan
+    Write-Host "               MAPPING SPECIAL SHARES" -ForegroundColor Cyan
+    Write-Host "================================================================" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "Special shares (requires specific permissions):" -ForegroundColor Yellow
+    Write-Host "  T: Quotations - Requires FS_SP_BUSS_0-Quotations_RW" -ForegroundColor Yellow
+    Write-Host "  I: Crib Catalog - Requires FS_SP_VTX_Crib-Catalog_RW" -ForegroundColor Yellow
+    Write-Host ""
+    
+    $cred = Get-Creds
+    $username = $cred.Username
+    $password = $cred.Password
+    
+    Write-Host ""
+    
+    # Store credentials once using cmdkey (handles special characters)
+    Write-Host "Storing credentials..." -ForegroundColor Cyan
+    cmdkey /add:$ServerFQDN /user:"$Domain\$username" /pass:$password 2>&1 | Out-Null
+    Write-Host "[OK] Credentials stored" -ForegroundColor Green
+    Write-Host ""
+    
+    Write-Host "Mapping special shares..." -ForegroundColor Cyan
+    Write-Host ""
+    
+    $successCount = 0
+    
+    foreach ($share in $SpecialShares) {
+        if (Map-Drive -Letter $share.Letter -Path $share.Path -Name $share.Name) {
+            $successCount++
+        }
+        Start-Sleep -Milliseconds 200
+    }
+    
+    Write-Host ""
+    Write-Host "================================================================" -ForegroundColor Cyan
+    Write-Host "Special shares mapped: $successCount" -ForegroundColor Green
+    Write-Host "================================================================" -ForegroundColor Cyan
+    Write-Host ""
+}
+
+# OPTION 3: REMOVE ALL
+elseif ($Option -eq "3") {
     Write-Host ""
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host "                    REMOVE ALL DRIVES" -ForegroundColor Cyan
@@ -188,29 +242,20 @@ elseif ($Option -eq "2") {
     
     Write-Host ""
     Write-Host "Removing..." -ForegroundColor Cyan
+    Write-Host ""
     
-    # Clear server sessions
-    net use \\$ServerFQDN /delete /yes 2>&1 | Out-Null
+    Clear-Sessions
     
-    # Remove all drives
-    foreach ($share in $AllShares) {
-        if (Test-Path $share.Letter) {
-            net use $share.Letter /delete /yes 2>&1 | Out-Null
-        }
-    }
-    if (Test-Path "P:") {
-        net use P: /delete /yes 2>&1 | Out-Null
-    }
-    
-    # Clear stored credentials
     try {
         $regPath = "HKCU:\Software\Vortex\DriveMapper"
         if (Test-Path $regPath) {
             Remove-Item -Path $regPath -Recurse -Force
+            Write-Host "[OK] Credentials cleared" -ForegroundColor Green
         }
     } catch {}
     
-    Write-Host "[OK] All drives and credentials removed" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "[OK] All removed" -ForegroundColor Green
     Write-Host ""
 }
 
