@@ -72,7 +72,7 @@ function Map-Drive {
         
         # Map using stored credentials (from cmdkey)
         # Quote UNC paths (handles share names with spaces like "ENGINEERING RECORDS$")
-        $quotedPath = ""$Path""
+        $quotedPath = '"' + $Path + '"'
         $result = cmd /c "net use $Letter $quotedPath /persistent:yes" 2>&1
         
         if ($LASTEXITCODE -eq 0) {
