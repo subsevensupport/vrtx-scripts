@@ -1,199 +1,131 @@
-# =====================================================================
-#  Vortex Systems - ULTRA SIMPLE Drive Mapper
-#  No credential storage, no fancy stuff - just map drives!
-# =====================================================================
+<# 
+Vortex Systems - Simple Drive Mapper (User)
+- Prompts for credentials
+- Stores them in Credential Manager (cmdkey)
+- Maps standard drives; attempts optional drives (T/I) and skips if access denied
+Run as the signed-in user (NOT as Administrator).
+#>
 
-param([string]$Option)
+$ErrorActionPreference = "Stop"
 
 $Server = "VORTEXFS.hq.vortex-systems.com"
-$Domain = "hq.vortex-systems.com"
+$NetBIOSDomain = "VORTEX-SYSTEMS"   # adjust if your NetBIOS name differs
 
-# All shares
-$Shares = @(
-    @{L = "U:"; P = "\\$Server\BUSINESS$"; N = "BUSINESS"},
-    @{L = "O:"; P = "\\$Server\EMPLOYEE$"; N = "EMPLOYEE"},
-    @{L = "R:"; P = "\\$Server\ENGINEERING RECORDS$"; N = "ENGINEERING RECORDS"},
-    @{L = "Q:"; P = "\\$Server\ENGINEERING$"; N = "ENGINEERING"},
-    @{L = "N:"; P = "\\$Server\FINANCE-HR$"; N = "FINANCE-HR"},
-    @{L = "S:"; P = "\\$Server\SOFTWARE$"; N = "SOFTWARE"},
-    @{L = "V:"; P = "\\$Server\VORTEX"; N = "VORTEX"}
+# Drive definitions (edit share names here if needed)
+$DriveMaps = @(
+    @{ Letter = "U:"; Share = "BUSINESS$" },
+    @{ Letter = "O:"; Share = "EMPLOYEE$" },
+    @{ Letter = "R:"; Share = "ENGINEERING RECORDS$" },  # space is OK (quoted)
+    @{ Letter = "Q:"; Share = "ENGINEERING$" },
+    @{ Letter = "N:"; Share = "FINANCE-HR$" },
+    @{ Letter = "S:"; Share = "SOFTWARE$" },
+    @{ Letter = "V:"; Share = "VORTEX$" }
 )
 
-$SpecialShares = @(
-    @{L = "T:"; P = "\\$Server\0-quotations$"; N = "Quotations"},
-    @{L = "I:"; P = "\\$Server\crib-catalog$"; N = "Crib Catalog"}
+# Optional drives (will be attempted; failures are OK)
+$OptionalDriveMaps = @(
+    @{ Letter = "T:"; Share = "Quotations$" },     # <-- change to your real share name if different
+    @{ Letter = "I:"; Share = "Crib Catalog$" }    # <-- change to your real share name if different
 )
 
-# Get credentials - SAME METHOD AS PRINTER SCRIPT
-function Get-Creds {
-    Write-Host ""
-    Write-Host "Authentication required" -ForegroundColor Yellow
-    Write-Host ""
-    
-    $username = Read-Host "Username (no domain)"
-    
-    if ([string]::IsNullOrWhiteSpace($username)) {
-        Write-Error "Authentication cancelled."
-        exit 1
-    }
-    
-    $securePass = Read-Host "Password" -AsSecureString
-    $password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePass))
-    
-    if ([string]::IsNullOrWhiteSpace($password)) {
-        Write-Error "Authentication cancelled."
-        exit 1
-    }
-    
-    $fullUsername = "$Domain\$username"
-    
-    Write-Host ""
-    Write-Host "[OK] Using credentials for: $fullUsername" -ForegroundColor Green
-    
-    # Return both username and password for use
-    return @{
-        FullUsername = $fullUsername
-        Username = $username
-        Password = $password
-    }
+function Read-PlainPassword {
+    param([string]$Prompt = "Password")
+    $secure = Read-Host -AsSecureString -Prompt $Prompt
+    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+    try { [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+    finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
 }
 
-# Map drive using cmdkey + net use (SAME AS PRINTER SCRIPT METHOD)
-function Map-Drive {
-    param($Letter, $Path, $Name)
-    
-    Write-Host "  $Name..." -ForegroundColor Cyan -NoNewline
-    
+function Normalize-User {
+    param([string]$UserInput)
+    if ($UserInput -match "\\") { return $UserInput } # already DOMAIN\user or user@domain
+    return "$NetBIOSDomain\$UserInput"
+}
+
+function Exec-NetUse {
+    param(
+        [Parameter(Mandatory)] [string] $Letter,
+        [Parameter(Mandatory)] [string] $UNC,
+        [Parameter(Mandatory)] [string] $User,
+        [Parameter(Mandatory)] [string] $Password
+    )
+
+    # Remove any existing mapping first (ignore errors)
+    cmd /c "net use $Letter /delete /y" | Out-Null
+
+    $quotedUNC = '"' + $UNC + '"'
+    $quotedPwd = '"' + ($Password.Replace('"','\"')) + '"'
+    $quotedUser = '"' + $User + '"'
+
+    $cmdLine = "net use $Letter $quotedUNC /user:$quotedUser $quotedPwd /persistent:yes"
+    $out = cmd /c $cmdLine 2>&1
+    return $out
+}
+
+function Add-CmdKey {
+    param(
+        [Parameter(Mandatory)] [string] $Target,
+        [Parameter(Mandatory)] [string] $User,
+        [Parameter(Mandatory)] [string] $Password
+    )
+    # Store creds for auto-reconnect after reboot/login
+    cmd /c ("cmdkey /add:`"$Target`" /user:`"$User`" /pass:`"$Password`"") | Out-Null
+}
+
+Write-Host "==============================="
+Write-Host "Vortex Drive Mapper (Simple)"
+Write-Host "Server: $Server"
+Write-Host "==============================="
+Write-Host ""
+
+$userInput = Read-Host "Enter your username (just username, or DOMAIN\username)"
+$userNorm  = Normalize-User $userInput
+$passPlain = Read-PlainPassword "Enter your password"
+
+# Store creds for the file server so drives persist after reboot
+Add-CmdKey -Target $Server -User $userNorm -Password $passPlain
+
+# Map standard drives
+Write-Host ""
+Write-Host "Mapping standard drives..."
+foreach ($d in $DriveMaps) {
+    $unc = "\\$Server\{0}" -f $d.Share
     try {
-        # Remove if exists
-        if (Test-Path $Letter) {
-            net use $Letter /delete /yes 2>&1 | Out-Null
-        }
-        
-        # Map using stored credentials (from cmdkey)
-        # Quote UNC paths (handles share names with spaces like "ENGINEERING RECORDS$")
-        $quotedPath = '"' + $Path + '"'
-        $result = cmd /c "net use $Letter $quotedPath /persistent:yes" 2>&1
-        
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host " Mapped" -ForegroundColor Green
-            return $true
-        } else {
-            Write-Host " Failed" -ForegroundColor Red
-            return $false
-        }
+        $out = Exec-NetUse -Letter $d.Letter -UNC $unc -User $userNorm -Password $passPlain
+        Write-Host ("[OK] {0} -> {1}" -f $d.Letter, $unc)
     } catch {
-        Write-Host " Failed" -ForegroundColor Red
-        return $false
+        Write-Host ("[SKIP] {0} -> {1}  ({2})" -f $d.Letter, $unc, $_.Exception.Message)
     }
 }
 
-# MENU
-if (-not $Option) {
-    Clear-Host
-    Write-Host ""
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "  VORTEX SYSTEMS - DRIVE MAPPER" -ForegroundColor Cyan
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "  1. Map Standard Drives" -ForegroundColor White
-    Write-Host "  2. Map Special Shares" -ForegroundColor White
-    Write-Host "  3. Remove All" -ForegroundColor White
-    Write-Host ""
-    $Option = Read-Host "Choose (1-3)"
+# Personal folder (P:)
+# Uses the entered username (without domain) when possible.
+$shortUser = $userInput
+if ($shortUser -match "\\") { $shortUser = $shortUser.Split("\")[-1] }
+$personalUNC = "\\$Server\EMPLOYEE$\" + $shortUser
+
+Write-Host ""
+Write-Host "Mapping personal drive..."
+try {
+    $out = Exec-NetUse -Letter "P:" -UNC $personalUNC -User $userNorm -Password $passPlain
+    Write-Host ("[OK] P: -> {0}" -f $personalUNC)
+} catch {
+    Write-Host ("[SKIP] P: -> {0}  ({1})" -f $personalUNC, $_.Exception.Message)
 }
 
-# OPTION 1: Standard
-if ($Option -eq "1") {
-    Write-Host ""
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "  Mapping Standard Drives" -ForegroundColor Cyan
-    Write-Host "========================================" -ForegroundColor Cyan
-    
-    # Get credentials (same as printer script)
-    $cred = Get-Creds
-    
-    # Store credentials using cmdkey (same as printer script)
-    Write-Host "Storing credentials..." -ForegroundColor Gray
-    & cmdkey /add:$Server /user:$cred.FullUsername /pass:$cred.Password 2>&1 | Out-Null
-    
-    Write-Host ""
-    Write-Host "Mapping drives..." -ForegroundColor Yellow
-    Write-Host ""
-    
-    $count = 0
-    
-    foreach ($s in $Shares) {
-        if (Map-Drive -Letter $s.L -Path $s.P -Name $s.N) { $count++ }
+# Optional drives
+Write-Host ""
+Write-Host "Attempting optional drives (if authorized)..."
+foreach ($d in $OptionalDriveMaps) {
+    $unc = "\\$Server\{0}" -f $d.Share
+    try {
+        $out = Exec-NetUse -Letter $d.Letter -UNC $unc -User $userNorm -Password $passPlain
+        Write-Host ("[OK] {0} -> {1}" -f $d.Letter, $unc)
+    } catch {
+        Write-Host ("[SKIP] {0} -> {1}" -f $d.Letter, $unc)
     }
-    
-    # Personal
-    Write-Host ""
-    Write-Host "Mapping personal folder..." -ForegroundColor Yellow
-    Write-Host ""
-    $personalPath = "\\$Server\EMPLOYEE$\$($cred.Username)"
-    if (Map-Drive -Letter "P:" -Path $personalPath -Name "Personal") { $count++ }
-    
-    Write-Host ""
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "Mapped: $count drives" -ForegroundColor Green
-    Write-Host "========================================" -ForegroundColor Cyan
-}
-
-# OPTION 2: Special
-elseif ($Option -eq "2") {
-    Write-Host ""
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "  Mapping Special Shares" -ForegroundColor Cyan
-    Write-Host "========================================" -ForegroundColor Cyan
-    
-    # Get credentials (same as printer script)
-    $cred = Get-Creds
-    
-    # Store credentials using cmdkey (same as printer script)
-    Write-Host "Storing credentials..." -ForegroundColor Gray
-    & cmdkey /add:$Server /user:$cred.FullUsername /pass:$cred.Password 2>&1 | Out-Null
-    
-    Write-Host ""
-    Write-Host "Mapping special shares..." -ForegroundColor Yellow
-    Write-Host ""
-    
-    $count = 0
-    
-    foreach ($s in $SpecialShares) {
-        if (Map-Drive -Letter $s.L -Path $s.P -Name $s.N) { $count++ }
-    }
-    
-    Write-Host ""
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "Mapped: $count shares" -ForegroundColor Green
-    Write-Host "========================================" -ForegroundColor Cyan
-}
-
-# OPTION 3: Remove
-elseif ($Option -eq "3") {
-    Write-Host ""
-    Write-Host "Removing all drives..." -ForegroundColor Cyan
-    Write-Host ""
-    
-    # Clear cmdkey
-    & cmdkey /delete:$Server 2>&1 | Out-Null
-    
-    # Remove all drives
-    foreach ($s in $Shares + $SpecialShares) {
-        if (Test-Path $s.L) {
-            net use $s.L /delete /yes 2>&1 | Out-Null
-            Write-Host "  Removed $($s.L)" -ForegroundColor Gray
-        }
-    }
-    if (Test-Path "P:") {
-        net use P: /delete /yes 2>&1 | Out-Null
-        Write-Host "  Removed P:" -ForegroundColor Gray
-    }
-    
-    Write-Host ""
-    Write-Host "[OK] All removed" -ForegroundColor Green
 }
 
 Write-Host ""
-pause
+Write-Host "Done. Open File Explorer -> This PC to verify."
+Write-Host "If drives don't show, reboot once (credentials are saved for $Server)."
