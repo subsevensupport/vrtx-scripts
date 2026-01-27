@@ -71,7 +71,9 @@ function Map-Drive {
         }
         
         # Map using stored credentials (from cmdkey)
-        $result = net use $Letter $Path /persistent:yes 2>&1
+        # Quote UNC paths (handles share names with spaces like "ENGINEERING RECORDS$")
+        $quotedPath = ""$Path""
+        $result = cmd /c "net use $Letter $quotedPath /persistent:yes" 2>&1
         
         if ($LASTEXITCODE -eq 0) {
             Write-Host " Mapped" -ForegroundColor Green
