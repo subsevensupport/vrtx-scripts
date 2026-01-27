@@ -109,8 +109,12 @@ function Map-Drive {
         # Show what we're about to run (hide password)
         Write-Host "    Command: net use $Letter $Path /user:$domainUser [PASSWORD] /persistent:yes" -ForegroundColor DarkGray
         
-        # Call net use directly (no cmd.exe wrapper to avoid quote issues)
-        $output = & net use $Letter $Path /user:$domainUser $Password /persistent:yes 2>&1
+        # Use cmd /c to call net use (this is what worked manually!)
+        # Escape the path if it has spaces
+        $escapedPath = if ($Path -match '\s') { "`"$Path`"" } else { $Path }
+        $command = "net use $Letter $escapedPath /user:$domainUser $Password /persistent:yes"
+        
+        $output = cmd /c $command 2>&1
         
         if ($LASTEXITCODE -eq 0) {
             Write-Host "[OK] $Letter -> $Name" -ForegroundColor Green
