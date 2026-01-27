@@ -5,7 +5,7 @@ REM
 REM Run this as a REGULAR USER (not administrator)
 REM 
 REM This configures:
-REM   1. Your network printers
+REM   1. Your network printers (optional - can skip)
 REM   2. Your standard network drives (U:, O:, R:, Q:, N:, S:, V:, P:)
 REM   3. Your special shares (T:, I:) - if you have permission
 REM
@@ -19,7 +19,7 @@ echo  VORTEX SYSTEMS - USER SETUP
 echo ============================================================================
 echo.
 echo This script will configure:
-echo   - Your network printers (based on your permissions)
+echo   - Your network printers (optional)
 echo   - Your standard network drives (U:, O:, R:, Q:, N:, S:, V:, P:)
 echo   - Your special shares (T: Quotations, I: Crib) - if authorized
 echo.
@@ -30,14 +30,35 @@ echo Your credentials will be stored securely for future use.
 echo.
 echo ============================================================================
 echo.
+
+REM Ask if user wants to skip printers
+set /p skip_printers="Do you want to skip printer setup? (Y/N, default=N): "
+if "%skip_printers%"=="" set skip_printers=N
+
+echo.
 echo Press any key to continue...
 pause >nul
 
 cls
 
 REM ============================================================================
-REM STEP 1: Deploy User Printers
+REM STEP 1: Deploy User Printers (OPTIONAL)
 REM ============================================================================
+
+if /i "%skip_printers%"=="Y" (
+    echo.
+    echo ============================================================================
+    echo  STEP 1: Printer Setup - SKIPPED
+    echo ============================================================================
+    echo.
+    echo Printer setup skipped by user choice.
+    echo.
+    echo ============================================================================
+    echo.
+    echo Press any key to continue to drive mapping...
+    pause >nul
+    goto DRIVE_MAPPING
+)
 
 echo.
 echo ============================================================================
@@ -69,6 +90,8 @@ echo.
 echo Press any key to continue to drive mapping...
 pause >nul
 
+:DRIVE_MAPPING
+
 cls
 
 REM ============================================================================
@@ -82,8 +105,14 @@ echo ===========================================================================
 echo.
 echo Mapping: U:, O:, R:, Q:, N:, S:, V:, P:
 echo.
-echo You will be prompted for your username and password again.
-echo (This is separate from printer credentials)
+
+if /i "%skip_printers%"=="Y" (
+    echo You will be prompted for your username and password.
+) else (
+    echo You will be prompted for your username and password again.
+    echo (This is separate from printer credentials)
+)
+
 echo.
 
 if exist "%~dp0User-DriveMapper.ps1" (
@@ -153,14 +182,24 @@ echo.
 echo ============================================================================
 echo.
 echo What was configured:
-echo   [OK] Network printers installed (based on your permissions)
+
+if /i "%skip_printers%"=="Y" (
+    echo   [SKIPPED] Network printers (skipped by user choice)
+) else (
+    echo   [OK] Network printers installed (based on your permissions)
+)
+
 echo   [OK] Standard network drives mapped (U:, O:, R:, Q:, N:, S:, V:, P:)
 echo   [OK] Special shares attempted (T:, I:) - you got what you have access to
 echo.
-echo Your printers:
-echo   - Check "Devices and Printers" in Control Panel
-echo   - You only see printers you have permission to use
-echo.
+
+if /i NOT "%skip_printers%"=="Y" (
+    echo Your printers:
+    echo   - Check "Devices and Printers" in Control Panel
+    echo   - You only see printers you have permission to use
+    echo.
+)
+
 echo Your standard drives:
 echo   - U: BUSINESS
 echo   - O: EMPLOYEE
@@ -178,7 +217,11 @@ echo.
 echo Important:
 echo   - A REBOOT is recommended for all settings to take effect
 echo   - Your drives will auto-reconnect after reboot
-echo   - Your printers are ready to use immediately
+
+if /i NOT "%skip_printers%"=="Y" (
+    echo   - Your printers are ready to use immediately
+)
+
 echo.
 echo ============================================================================
 echo.
