@@ -1,8 +1,6 @@
 # =====================================================================
-#  Vortex Systems - Network Drive Mapper
-#  Version 2.0 - Final Release
-#  
-#  For workgroup PCs accessing on-premises file server
+#  Vortex Systems - Network Drive Mapper (SIMPLIFIED)
+#  Works like GUI - simple and reliable
 # =====================================================================
 
 param(
@@ -23,159 +21,35 @@ if (-not (Test-Path $LogFolder)) {
 
 # Logging function
 function Write-Log {
-    param([string]$Message, [string]$Level = "INFO")
+    param([string]$Message)
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     try {
-        Add-Content -Path $LogFile -Value "[$timestamp] [$Level] $Message" -ErrorAction SilentlyContinue
+        Add-Content -Path $LogFile -Value "[$timestamp] $Message" -ErrorAction SilentlyContinue
     } catch {}
 }
 
-Write-Log "Script started by $env:USERNAME on $env:COMPUTERNAME"
+Write-Log "=== Script started by $env:USERNAME on $env:COMPUTERNAME ==="
 
-
-# Standard shares
-$Shares = @(
+# All shares - will try to map all, server enforces permissions
+$AllShares = @(
     @{Letter = "U:"; Path = "\\$ServerFQDN\BUSINESS$"; Name = "BUSINESS"},
-    @{Letter = "O:"; Path = "\\$ServerFQDN\EMPLOYEE$"; Name = "EMPLOYEE"; RequireWrite = $true},
+    @{Letter = "O:"; Path = "\\$ServerFQDN\EMPLOYEE$"; Name = "EMPLOYEE"},
     @{Letter = "R:"; Path = "\\$ServerFQDN\ENGINEERING RECORDS$"; Name = "ENGINEERING RECORDS"},
     @{Letter = "Q:"; Path = "\\$ServerFQDN\ENGINEERING$"; Name = "ENGINEERING"},
     @{Letter = "N:"; Path = "\\$ServerFQDN\FINANCE-HR$"; Name = "FINANCE-HR"},
     @{Letter = "S:"; Path = "\\$ServerFQDN\SOFTWARE$"; Name = "SOFTWARE"},
-    @{Letter = "V:"; Path = "\\$ServerFQDN\VORTEX"; Name = "VORTEX"}
+    @{Letter = "V:"; Path = "\\$ServerFQDN\VORTEX"; Name = "VORTEX"},
+    @{Letter = "T:"; Path = "\\$ServerFQDN\0-quotations$"; Name = "Quotations"},
+    @{Letter = "I:"; Path = "\\$ServerFQDN\crib-catalog$"; Name = "Crib Catalog"}
 )
 
-# Special shares (require AD group membership)
-$SpecialShares = @(
-    @{
-        Letter = "T:"
-        Path = "\\$ServerFQDN\0-quotations$"
-        Name = "Quotations"
-        RequiredADGroups = @("FS_SP_BUSS_0-Quotations_RW")
-        RequireWrite = $true
-    },
-    @{
-        Letter = "I:"
-        Path = "\\$ServerFQDN\crib-catalog$"
-        Name = "Crib Catalog"
-        RequiredADGroups = @("FS_SP_VTX_Crib-Catalog_RW")
-        RequireWrite = $true
-    }
-)
-
-# Function to test share access using net use (FIXED - MORE RELIABLE)
-function Test-ShareAccess {
-    param(
-        [string]$UNCPath,
-        [string]$UserUPN,
-        [string]$Password
-    )
-    try {
-        $testDrive = "Z:"
-        net use $testDrive /delete /yes 2>&1 | Out-Null
-        $result = net use $testDrive $UNCPath /user:$UserUPN $Password 2>&1
-        
-        if ($LASTEXITCODE -eq 0) {
-            net use $testDrive /delete /yes 2>&1 | Out-Null
-            return $true
-        } else {
-            Write-Log "Access test failed for $UNCPath : $result" "DEBUG"
-            return $false
-        }
-    } catch {
-        Write-Log "Access test error for $UNCPath : $($_.Exception.Message)" "DEBUG"
-        return $false
-    }
-}
-
-# Function to test write access
-function Test-WriteAccess {
-    param(
-        [string]$UNCPath,
-        [string]$UserUPN,
-        [string]$Password
-    )
-    
-    try {
-        $testDrive = "Z:"
-        net use $testDrive /delete /yes 2>&1 | Out-Null
-        $result = net use $testDrive $UNCPath /user:$UserUPN $Password 2>&1
-        
-        if ($LASTEXITCODE -ne 0) {
-            return $false
-        }
-        
-        $testFile = "${testDrive}\~vortex_write_test_$(Get-Date -Format 'yyyyMMddHHmmss').tmp"
-        try {
-            New-Item -Path $testFile -ItemType File -Force -ErrorAction Stop | Out-Null
-            Remove-Item -Path $testFile -Force -ErrorAction SilentlyContinue
-            net use $testDrive /delete /yes 2>&1 | Out-Null
-            return $true
-        } catch {
-            net use $testDrive /delete /yes 2>&1 | Out-Null
-            Write-Log "Write test failed for $UNCPath : $($_.Exception.Message)" "DEBUG"
-            return $false
-        }
-    } catch {
-        net use $testDrive /delete /yes 2>&1 | Out-Null
-        return $false
-    }
-}
-
-# Function to get user AD groups via LDAP
-function Get-UserADGroups {
-    param(
-        [string]$Username,
-        [string]$Password,
-        [string]$Domain = "hq.vortex-systems.com"
-    )
-    
-    try {
-        # Create credentials for LDAP authentication (needed from workgroup PCs)
-        $ldapUser = "$Domain\$Username"
-        
-        # Connect to LDAP with authentication
-        $ldapPath = "LDAP://$Domain"
-        $directoryEntry = New-Object System.DirectoryServices.DirectoryEntry($ldapPath, $ldapUser, $Password)
-        
-        # Test connection
-        $null = $directoryEntry.NativeGuid
-        
-        # Create searcher with authenticated connection
-        $searcher = New-Object System.DirectoryServices.DirectorySearcher($directoryEntry)
-        $searcher.Filter = "(&(objectCategory=person)(objectClass=user)(sAMAccountName=$Username))"
-        $searcher.PropertiesToLoad.Add("memberOf") | Out-Null
-        
-        $result = $searcher.FindOne()
-        if ($result) {
-            $groups = @()
-            foreach ($groupDN in $result.Properties["memberOf"]) {
-                if ($groupDN -match 'CN=([^,]+)') {
-                    $groups += $matches[1]
-                }
-            }
-            Write-Log "Found $($groups.Count) AD groups for $Username"
-            Write-Host "[INFO] Found $($groups.Count) AD groups for user" -ForegroundColor Gray
-            return $groups
-        } else {
-            Write-Log "No user found in AD for $Username" "WARNING"
-            Write-Host "[WARNING] Could not find user in Active Directory" -ForegroundColor Yellow
-        }
-    } catch {
-        Write-Log "AD group lookup failed: $($_.Exception.Message)" "WARNING"
-        Write-Host "[WARNING] Could not query AD groups: $($_.Exception.Message)" -ForegroundColor Yellow
-    }
-    return @()
-}
-
-# Function to get credentials
-function Get-CustomCredential {
-    param([string]$Purpose = "network drive mapping")
-    
+# Simple credential prompt
+function Get-Credentials {
     Write-Host ""
-    Write-Host "Enter your credentials for $Purpose" -ForegroundColor Cyan
+    Write-Host "Enter your credentials" -ForegroundColor Cyan
     Write-Host ""
     
-    $username = Read-Host "Username (no domain, just username)"
+    $username = Read-Host "Username (just username, no domain)"
     $password_secure = Read-Host "Password" -AsSecureString
     $password = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
         [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password_secure))
@@ -187,214 +61,41 @@ function Get-CustomCredential {
     }
 }
 
-# Function to store credentials
-function Store-Credentials {
+# Simple drive mapping function - exactly like GUI
+function Map-Drive {
     param(
+        [string]$Letter,
+        [string]$Path,
+        [string]$Name,
         [string]$Username,
-        [string]$Password,
-        [string]$UPN
+        [string]$Password
     )
     
     try {
-        $regPath = "HKCU:\Software\Vortex\DriveMapper"
-        if (-not (Test-Path $regPath)) {
-            New-Item -Path $regPath -Force | Out-Null
+        # Remove if already mapped
+        if (Test-Path $Letter) {
+            net use $Letter /delete /yes 2>&1 | Out-Null
         }
         
-        $passwordBytes = [System.Text.Encoding]::UTF8.GetBytes($Password)
-        $passwordBase64 = [Convert]::ToBase64String($passwordBytes)
+        # Map using WScript.Network (exactly like GUI)
+        $network = New-Object -ComObject WScript.Network
+        $network.MapNetworkDrive($Letter, $Path, $true, "$Domain\$Username", $Password)
         
-        Set-ItemProperty -Path $regPath -Name "UPN" -Value $UPN -Force
-        Set-ItemProperty -Path $regPath -Name "Username" -Value $Username -Force
-        Set-ItemProperty -Path $regPath -Name "Password" -Value $passwordBase64 -Force
-        
-        Write-Log "Credentials stored successfully"
-        return $true
-    } catch {
-        Write-Log "Failed to store credentials: $($_.Exception.Message)" "ERROR"
-        return $false
-    }
-}
-
-# Function to retrieve stored credentials
-function Get-StoredCredentials {
-    try {
-        $regPath = "HKCU:\Software\Vortex\DriveMapper"
-        if (Test-Path $regPath) {
-            $props = Get-ItemProperty -Path $regPath
-            if ($props.UPN -and $props.Username -and $props.Password) {
-                $passwordBytes = [Convert]::FromBase64String($props.Password)
-                $password = [System.Text.Encoding]::UTF8.GetString($passwordBytes)
-                
-                return @{
-                    Username = $props.Username
-                    Password = $password
-                    UPN = $props.UPN
-                }
-            }
-        }
-    } catch {
-        Write-Log "Failed to retrieve stored credentials: $($_.Exception.Message)" "WARNING"
-    }
-    return $null
-}
-
-# Function to fix trust relationship
-function Fix-TrustRelationship {
-    Write-Host "Configuring trust relationship..." -ForegroundColor Cyan
-    Write-Log "Applying trust relationship fix"
-    
-    try {
-        $zonePath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\Domains\vortex-systems.com"
-        if (-not (Test-Path $zonePath)) {
-            New-Item -Path $zonePath -Force | Out-Null
-        }
-        
-        Set-ItemProperty -Path $zonePath -Name "file" -Value 1 -Type DWord -Force
-        
-        $hqPath = "$zonePath\hq"
-        if (-not (Test-Path $hqPath)) {
-            New-Item -Path $hqPath -Force | Out-Null
-        }
-        Set-ItemProperty -Path $hqPath -Name "file" -Value 1 -Type DWord -Force
-        
-        Write-Host "[OK] Trust relationship configured" -ForegroundColor Green
-        Write-Log "Trust relationship configured successfully"
-        
-        Write-Host ""
-        Write-Host "IMPORTANT: You must REBOOT for the trust fix to take effect!" -ForegroundColor Yellow
-        Write-Host ""
-        
-        return $true
-    } catch {
-        Write-Host "[WARNING] Failed to configure trust relationship" -ForegroundColor Yellow
-        Write-Log "Trust relationship fix failed: $($_.Exception.Message)" "WARNING"
-        return $false
-    }
-}
-
-# Function to map a drive with full persistence
-function Map-NetworkDrive {
-    param(
-        [string]$DriveLetter,
-        [string]$UNCPath,
-        [string]$UserUPN,
-        [string]$Password,
-        [string]$Label = ""
-    )
-    
-    try {
-        if (Test-Path $DriveLetter) {
-            net use $DriveLetter /delete /yes 2>&1 | Out-Null
-        }
-        
-        # Store credentials using cmdkey (handles special characters automatically)
-        cmdkey /add:$ServerFQDN /user:$UserUPN /pass:$Password 2>&1 | Out-Null
-        
-        # Also store for the specific UNC path
-        $escapedPath = $UNCPath -replace '\\', '\\\\'
-        cmdkey /add:$UNCPath /user:$UserUPN /pass:$Password 2>&1 | Out-Null
-        
-        # Map drive using stored credentials - quote UNC path to handle spaces
-        $result = & net use $DriveLetter "`"$UNCPath`"" /persistent:yes 2>&1
-        
-        if ($LASTEXITCODE -ne 0) {
-            throw "net use failed: $result"
-        }
-        
-        $letter = $DriveLetter.TrimEnd(':')
-        $regPath = "HKCU:\Network\$letter"
-        
-        if (-not (Test-Path $regPath)) {
-            New-Item -Path $regPath -Force | Out-Null
-        }
-        
-        Set-ItemProperty -Path $regPath -Name "RemotePath" -Value $UNCPath -Force
-        Set-ItemProperty -Path $regPath -Name "UserName" -Value $UserUPN -Force
-        Set-ItemProperty -Path $regPath -Name "ProviderName" -Value "Microsoft Windows Network" -Force
-        Set-ItemProperty -Path $regPath -Name "ProviderType" -Value 0x20000 -Type DWord -Force
-        Set-ItemProperty -Path $regPath -Name "ConnectionType" -Value 1 -Type DWord -Force
-        Set-ItemProperty -Path $regPath -Name "ConnectFlags" -Value 0 -Type DWord -Force
-        Set-ItemProperty -Path $regPath -Name "DeferFlags" -Value 4 -Type DWord -Force
-        
-        net use $DriveLetter /persistent:yes 2>&1 | Out-Null
-        
-        $signature = @'
-[DllImport("shell32.dll", CharSet = CharSet.Auto)]
-public static extern int SHChangeNotify(int eventId, int flags, IntPtr item1, IntPtr item2);
-'@
-        $type = Add-Type -MemberDefinition $signature -Name ShellNotify -Namespace Win32 -PassThru -ErrorAction SilentlyContinue
-        if ($type) {
-            $type::SHChangeNotify(0x8000000, 0x1000, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
-        }
-        
-        Write-Host "[OK] $DriveLetter -> $Label" -ForegroundColor Green
-        Write-Log "Mapped $DriveLetter to $UNCPath successfully"
+        Write-Host "[OK] $Letter -> $Name" -ForegroundColor Green
+        Write-Log "Mapped $Letter to $Path"
         return $true
         
     } catch {
-        Write-Host "[FAILED] $DriveLetter -> $Label : $($_.Exception.Message)" -ForegroundColor Red
-        Write-Log "Failed to map $DriveLetter : $($_.Exception.Message)" "ERROR"
+        # If access denied, skip silently (server enforces permissions)
+        if ($_.Exception.Message -match "access|denied|1326") {
+            Write-Host "[SKIP] $Letter -> $Name (no permission)" -ForegroundColor Yellow
+            Write-Log "Skipped $Letter - no permission"
+        } else {
+            Write-Host "[SKIP] $Letter -> $Name ($($_.Exception.Message))" -ForegroundColor Yellow
+            Write-Log "Failed $Letter - $($_.Exception.Message)"
+        }
         return $false
     }
-}
-
-# Function to remove all drives
-function Remove-AllDrives {
-    Write-Host ""
-    Write-Host "================================================================" -ForegroundColor Cyan
-    Write-Host "                    REMOVE ALL DRIVES" -ForegroundColor Cyan
-    Write-Host "================================================================" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "This will:" -ForegroundColor Yellow
-    Write-Host "  * Remove all mapped drives" -ForegroundColor Yellow
-    Write-Host "  * Clear stored credentials" -ForegroundColor Yellow
-    Write-Host "  * Clear all registry settings" -ForegroundColor Yellow
-    Write-Host ""
-    
-    $confirm = Read-Host "Are you sure? (Y/N)"
-    if ($confirm -ne "Y") {
-        Write-Host "Cancelled." -ForegroundColor Yellow
-        return
-    }
-    
-    Write-Host ""
-    Write-Host "Removing drives..." -ForegroundColor Cyan
-    
-    $allDrives = $Shares + $SpecialShares
-    foreach ($drive in $allDrives) {
-        if (Test-Path $drive.Letter) {
-            try {
-                net use $drive.Letter /delete /yes 2>&1 | Out-Null
-                Write-Host "[OK] Removed $($drive.Letter)" -ForegroundColor Green
-            } catch {
-                Write-Host "[WARNING] Could not remove $($drive.Letter)" -ForegroundColor Yellow
-            }
-        }
-    }
-    
-    if (Test-Path "P:") {
-        net use P: /delete /yes 2>&1 | Out-Null
-        Write-Host "[OK] Removed P:" -ForegroundColor Green
-    }
-    
-    cmdkey /delete:$ServerFQDN 2>&1 | Out-Null
-    foreach ($drive in $allDrives) {
-        cmdkey /delete:$($drive.Path) 2>&1 | Out-Null
-    }
-    
-    try {
-        $regPath = "HKCU:\Software\Vortex\DriveMapper"
-        if (Test-Path $regPath) {
-            Remove-Item -Path $regPath -Recurse -Force
-            Write-Host "[OK] Cleared stored settings" -ForegroundColor Green
-        }
-    } catch {}
-    
-    Write-Host ""
-    Write-Host "All drives and credentials removed." -ForegroundColor Green
-    Write-Host ""
-    Write-Log "All drives and credentials removed"
 }
 
 # MAIN MENU
@@ -403,18 +104,16 @@ if (-not $Option) {
     Write-Host ""
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host "           VORTEX SYSTEMS - NETWORK DRIVE MAPPER" -ForegroundColor Cyan
-    Write-Host "                    Version 2.0 Final" -ForegroundColor Cyan
+    Write-Host "                    Simplified Version" -ForegroundColor Cyan
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Select an option:" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "  1. Map My Drives (Standard setup)" -ForegroundColor White
-    Write-Host "  2. Update Password Only" -ForegroundColor White
-    Write-Host "  3. Fix Connection Issues (Trust relationship)" -ForegroundColor White
-    Write-Host "  4. Remove Everything (Uninstall)" -ForegroundColor White
+    Write-Host "  1. Map My Drives" -ForegroundColor White
+    Write-Host "  2. Remove All Drives" -ForegroundColor White
     Write-Host ""
     
-    $Option = Read-Host "Enter option (1-4)"
+    $Option = Read-Host "Enter option (1-2)"
 }
 
 Write-Log "User selected option: $Option"
@@ -427,247 +126,90 @@ if ($Option -eq "1") {
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host ""
     
-    $stored = Get-StoredCredentials
-    if ($stored) {
-        Write-Host "Using stored credentials for: $($stored.Username)" -ForegroundColor Green
-        $username = $stored.Username
-        $password = $stored.Password
-        $upn = $stored.UPN
-    } else {
-        $cred = Get-CustomCredential
-        $username = $cred.Username
-        $password = $cred.Password
-        $upn = $cred.UPN
-        
-        Write-Host ""
-        Write-Host "Testing credentials..." -ForegroundColor Cyan
-        
-        # Store credentials temporarily for test
-        $testPath = $Shares[0].Path
-        cmdkey /add:$ServerFQDN /user:$upn /pass:$password 2>&1 | Out-Null
-        
-        # Try to connect using stored credentials - quote path to handle spaces
-        $testResult = & net use * "`"$testPath`"" 2>&1
-        
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host ""
-            Write-Host "[ERROR] Invalid credentials or cannot reach server" -ForegroundColor Red
-            Write-Host "Please check your username/password and network connection." -ForegroundColor Red
-            Write-Host "Error details: $testResult" -ForegroundColor Red
-            Write-Host ""
-            Write-Log "Credential test failed: $testResult" "ERROR"
-            pause
-            exit 1
-        }
-        
-        # Clean up test connection
-        net use * /delete /yes 2>&1 | Out-Null
-        
-        Write-Host "[OK] Credentials verified" -ForegroundColor Green
-        
-        Store-Credentials -Username $username -Password $password -UPN $upn
-    }
-    
-    if ($isAdmin) {
-        Fix-TrustRelationship | Out-Null
-    } else {
-        Write-Host "[INFO] Run as administrator for trust relationship fix" -ForegroundColor Yellow
-    }
+    # Get credentials
+    $cred = Get-Credentials
+    $username = $cred.Username
+    $password = $cred.Password
     
     Write-Host ""
-    Write-Host "Checking permissions..." -ForegroundColor Cyan
-    $userGroups = Get-UserADGroups -Username $username -Password $password -Domain $Domain
-    
-    $accessibleSpecialShares = @()
-    foreach ($share in $SpecialShares) {
-        $hasGroup = $false
-        foreach ($reqGroup in $share.RequiredADGroups) {
-            if ($userGroups -contains $reqGroup) {
-                $hasGroup = $true
-                Write-Host "[OK] You are in group: $reqGroup" -ForegroundColor Green
-                break
-            }
-        }
-        
-        if ($hasGroup) {
-            $accessibleSpecialShares += $share
-        } else {
-            Write-Host "[SKIP] Not in required group for: $($share.Name)" -ForegroundColor Yellow
-        }
-    }
-    
+    Write-Host "Mapping drives..." -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "Mapping standard drives..." -ForegroundColor Cyan
+    
     $successCount = 0
     
-    foreach ($share in $Shares) {
-        # Just try to map - if it works, great. If not, skip it.
-        if (Map-NetworkDrive -DriveLetter $share.Letter -UNCPath $share.Path -UserUPN $upn -Password $password -Label $share.Name) {
+    # Map all standard drives
+    foreach ($share in $AllShares) {
+        if (Map-Drive -Letter $share.Letter -Path $share.Path -Name $share.Name -Username $username -Password $password) {
             $successCount++
         }
+        Start-Sleep -Milliseconds 200
     }
     
+    # Map personal folder
     Write-Host ""
     Write-Host "Mapping personal folder..." -ForegroundColor Cyan
     $personalPath = "\\$ServerFQDN\EMPLOYEE$\$username"
-    if (Map-NetworkDrive -DriveLetter "P:" -UNCPath $personalPath -UserUPN $upn -Password $password -Label "Personal") {
+    if (Map-Drive -Letter "P:" -Path $personalPath -Name "Personal" -Username $username -Password $password) {
         $successCount++
     }
     
-    if ($accessibleSpecialShares.Count -gt 0) {
-        Write-Host ""
-        Write-Host "Mapping special shares..." -ForegroundColor Cyan
-        foreach ($share in $accessibleSpecialShares) {
-            if (Map-NetworkDrive -DriveLetter $share.Letter -UNCPath $share.Path -UserUPN $upn -Password $password -Label $share.Name) {
-                $successCount++
-            }
-        }
-    }
-    
-    try {
-        $regPath = "HKCU:\Software\Vortex\DriveMapper"
-        $sharesList = ($Shares + @(@{Letter="P:"}) + $accessibleSpecialShares | ForEach-Object { $_.Letter }) -join ","
-        Set-ItemProperty -Path $regPath -Name "AccessibleShares" -Value $sharesList -Force
-    } catch {}
-    
     Write-Host ""
     Write-Host "================================================================" -ForegroundColor Cyan
-    Write-Host "                         SUMMARY" -ForegroundColor Cyan
+    Write-Host "                         COMPLETE" -ForegroundColor Cyan
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Drives mapped successfully: $successCount" -ForegroundColor Green
-    
     Write-Host ""
-    Write-Host "Verifying persistence settings..." -ForegroundColor Cyan
-    $persistentCount = 0
-    foreach ($drive in (Get-PSDrive -PSProvider FileSystem | Where-Object { $_.DisplayRoot -like "\\$ServerFQDN\*" })) {
-        $letter = $drive.Name
-        $regPath = "HKCU:\Network\$letter"
-        if (Test-Path $regPath) {
-            $props = Get-ItemProperty -Path $regPath
-            if ($props.ConnectionType -eq 1) {
-                $persistentCount++
-            }
-        }
-    }
-    Write-Host "[OK] $persistentCount drives configured for auto-reconnect" -ForegroundColor Green
-    
+    Write-Host "Your drives are ready to use!" -ForegroundColor Green
     Write-Host ""
-    if ($isAdmin) {
-        Write-Host "Network wait enabled: Drives will be ready when Windows starts" -ForegroundColor Green
-        Write-Host ""
-        Write-Host "IMPORTANT: Please REBOOT for all settings to take effect!" -ForegroundColor Yellow
-        Write-Host "After reboot:" -ForegroundColor Cyan
-        Write-Host "  * Trust relationship will be active" -ForegroundColor Cyan
-        Write-Host "  * Drives will reconnect automatically" -ForegroundColor Cyan
-        Write-Host "  * No red X icons at startup" -ForegroundColor Cyan
-    } else {
-        Write-Host "For best results, run Quick-Setup.bat as administrator" -ForegroundColor Yellow
-    }
-    
+    Write-Host "Note: Drives will auto-reconnect at next login" -ForegroundColor Cyan
     Write-Host ""
-    Write-Log "Drive mapping completed - $successCount drives mapped"
+    
+    Write-Log "=== Completed - $successCount drives mapped ==="
 }
 
-# OPTION 2: UPDATE PASSWORD
+# OPTION 2: REMOVE ALL DRIVES
 elseif ($Option -eq "2") {
     Write-Host ""
     Write-Host "================================================================" -ForegroundColor Cyan
-    Write-Host "                    UPDATE PASSWORD" -ForegroundColor Cyan
+    Write-Host "                    REMOVE ALL DRIVES" -ForegroundColor Cyan
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host ""
     
-    $cred = Get-CustomCredential -Purpose "password update"
-    $username = $cred.Username
-    $password = $cred.Password
-    $upn = $cred.UPN
-    
-    Write-Host ""
-    Write-Host "Testing new credentials..." -ForegroundColor Cyan
-    
-    # Store credentials temporarily for test
-    $testPath = $Shares[0].Path
-    cmdkey /add:$ServerFQDN /user:$upn /pass:$password 2>&1 | Out-Null
-    
-    # Try to connect using stored credentials - quote path to handle spaces
-    $testResult = & net use * "`"$testPath`"" 2>&1
-    
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host ""
-        Write-Host "[ERROR] Invalid credentials" -ForegroundColor Red
-        Write-Host "Error details: $testResult" -ForegroundColor Red
-        Write-Host ""
-        Write-Log "Password update failed - invalid credentials: $testResult" "ERROR"
-        pause
-        exit 1
+    $confirm = Read-Host "Remove all mapped drives? (Y/N)"
+    if ($confirm -ne "Y") {
+        Write-Host "Cancelled." -ForegroundColor Yellow
+        exit
     }
     
-    net use * /delete /yes 2>&1 | Out-Null
-    Write-Host "[OK] Credentials verified" -ForegroundColor Green
-    
-    Store-Credentials -Username $username -Password $password -UPN $upn
-    
-    cmdkey /delete:$ServerFQDN 2>&1 | Out-Null
-    cmdkey /add:$ServerFQDN /user:$upn /pass:$password 2>&1 | Out-Null
-    
     Write-Host ""
-    Write-Host "Updating existing drives..." -ForegroundColor Cyan
+    Write-Host "Removing drives..." -ForegroundColor Cyan
+    Write-Host ""
     
-    $drives = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.DisplayRoot -like "\\$ServerFQDN\*" }
-    foreach ($drive in $drives) {
-        try {
-            $letter = $drive.Name + ":"
-            $path = $drive.DisplayRoot
-            
-            net use $letter /delete /yes 2>&1 | Out-Null
-            
-            # Store credentials for this path
-            cmdkey /add:$path /user:$upn /pass:$password 2>&1 | Out-Null
-            
-            # Reconnect using stored credentials - quote path to handle spaces
-            & net use $letter "`"$path`"" /persistent:yes 2>&1 | Out-Null
-            
-            Write-Host "[OK] Updated $letter" -ForegroundColor Green
-        } catch {
-            Write-Host "[WARNING] Could not update $letter" -ForegroundColor Yellow
+    foreach ($share in $AllShares) {
+        if (Test-Path $share.Letter) {
+            try {
+                net use $share.Letter /delete /yes 2>&1 | Out-Null
+                Write-Host "[OK] Removed $($share.Letter)" -ForegroundColor Green
+            } catch {
+                Write-Host "[SKIP] $($share.Letter)" -ForegroundColor Yellow
+            }
         }
     }
     
+    if (Test-Path "P:") {
+        net use P: /delete /yes 2>&1 | Out-Null
+        Write-Host "[OK] Removed P:" -ForegroundColor Green
+    }
+    
     Write-Host ""
-    Write-Host "Password updated successfully!" -ForegroundColor Green
-    Write-Host ""
-    Write-Log "Password updated successfully"
-}
-
-# OPTION 3: FIX CONNECTION ISSUES
-elseif ($Option -eq "3") {
-    Write-Host ""
-    Write-Host "================================================================" -ForegroundColor Cyan
-    Write-Host "                FIX CONNECTION ISSUES" -ForegroundColor Cyan
-    Write-Host "================================================================" -ForegroundColor Cyan
+    Write-Host "All drives removed." -ForegroundColor Green
     Write-Host ""
     
-    if (Fix-TrustRelationship) {
-        Write-Host "Trust relationship has been configured." -ForegroundColor Green
-        Write-Host ""
-        Write-Host "Please REBOOT your computer now." -ForegroundColor Yellow
-        Write-Host ""
-        
-        $reboot = Read-Host "Reboot now? (Y/N)"
-        if ($reboot -eq "Y") {
-            Write-Host "Rebooting in 10 seconds..." -ForegroundColor Yellow
-            shutdown /r /t 10 /c "Applying network trust relationship fix"
-        }
-    }
+    Write-Log "=== All drives removed ==="
 }
 
-# OPTION 4: REMOVE EVERYTHING
-elseif ($Option -eq "4") {
-    Remove-AllDrives
-}
-
-# DONE
 Write-Host ""
 Write-Host "Press any key to exit..."
 $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-Write-Log "Script completed"
+Write-Log "=== Script completed ==="
