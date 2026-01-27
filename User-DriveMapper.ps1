@@ -106,14 +106,21 @@ function Map-Drive {
     param([string]$Letter, [string]$Path, [string]$Name)
     
     try {
+        # Quote the path to handle spaces (ENGINEERING RECORDS$)
+        $quotedPath = "`"$Path`""
+        
+        Write-Host ">>> Mapping: $Letter -> $Name" -ForegroundColor Yellow
+        Write-Host "    Command: net use $Letter $quotedPath /persistent:yes" -ForegroundColor DarkGray
+        
         # Map using stored credentials (no password on command line!)
-        $output = net use $Letter $Path /persistent:yes 2>&1
+        $output = net use $Letter $quotedPath /persistent:yes 2>&1
         
         if ($LASTEXITCODE -eq 0) {
             Write-Host "[OK] $Letter -> $Name" -ForegroundColor Green
             return $true
         } else {
             Write-Host "[SKIP] $Letter -> $Name" -ForegroundColor Yellow
+            Write-Host "       Exit Code: $LASTEXITCODE" -ForegroundColor DarkGray
             Write-Host "       Error: $output" -ForegroundColor DarkGray
             return $false
         }
@@ -158,12 +165,20 @@ if ($Option -eq "1") {
     
     # Store credentials using cmdkey (handles special characters!)
     Write-Host "Storing credentials using Windows Credential Manager..." -ForegroundColor Cyan
-    cmdkey /add:$ServerFQDN /user:$domainUser /pass:$password 2>&1 | Out-Null
+    $cmdkeyOutput = cmdkey /add:$ServerFQDN /user:$domainUser /pass:$password 2>&1
     
     if ($LASTEXITCODE -eq 0) {
         Write-Host "[OK] Credentials stored" -ForegroundColor Green
+        Write-Host "     Target: $ServerFQDN" -ForegroundColor DarkGray
+        Write-Host "     User: $domainUser" -ForegroundColor DarkGray
     } else {
-        Write-Host "[WARNING] cmdkey failed - trying anyway" -ForegroundColor Yellow
+        Write-Host "[ERROR] cmdkey failed!" -ForegroundColor Red
+        Write-Host "     Exit Code: $LASTEXITCODE" -ForegroundColor Red
+        Write-Host "     Output: $cmdkeyOutput" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "Cannot continue without stored credentials." -ForegroundColor Red
+        pause
+        exit 1
     }
     
     Write-Host ""
@@ -210,8 +225,17 @@ elseif ($Option -eq "2") {
     
     # Store credentials using cmdkey
     Write-Host "Storing credentials..." -ForegroundColor Cyan
-    cmdkey /add:$ServerFQDN /user:$domainUser /pass:$password 2>&1 | Out-Null
-    Write-Host "[OK] Credentials stored" -ForegroundColor Green
+    $cmdkeyOutput = cmdkey /add:$ServerFQDN /user:$domainUser /pass:$password 2>&1
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "[OK] Credentials stored" -ForegroundColor Green
+    } else {
+        Write-Host "[ERROR] cmdkey failed!" -ForegroundColor Red
+        Write-Host "     Exit Code: $LASTEXITCODE" -ForegroundColor Red
+        Write-Host "     Output: $cmdkeyOutput" -ForegroundColor Red
+        pause
+        exit 1
+    }
     
     Write-Host ""
     Write-Host "Mapping special shares..." -ForegroundColor Cyan
