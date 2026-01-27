@@ -1,6 +1,6 @@
 # =====================================================================
-#  Vortex Systems - Network Drive Mapper (DEBUG VERSION)
-#  Shows exactly what's happening
+#  Vortex Systems - Network Drive Mapper
+#  Using cmdkey method (handles special characters in password)
 # =====================================================================
 
 param([string]$Option)
@@ -77,6 +77,10 @@ function Get-Creds {
 function Clear-Sessions {
     Write-Host "Clearing existing connections..." -ForegroundColor Cyan
     
+    # Clear cmdkey
+    cmdkey /delete:$ServerFQDN 2>&1 | Out-Null
+    
+    # Clear drives
     foreach ($share in $StandardShares) {
         if (Test-Path $share.Letter) {
             net use $share.Letter /delete /yes 2>&1 | Out-Null
@@ -97,31 +101,19 @@ function Clear-Sessions {
     Write-Host ""
 }
 
-# Map a drive - WITH FULL DEBUGGING
+# Map a drive - Using cmdkey method (works with special characters!)
 function Map-Drive {
-    param([string]$Letter, [string]$Path, [string]$Name, [string]$Username, [string]$Password)
-    
-    Write-Host ">>> Attempting: $Letter -> $Name" -ForegroundColor Yellow
+    param([string]$Letter, [string]$Path, [string]$Name)
     
     try {
-        $domainUser = "$Domain\$Username"
-        
-        # Show what we're about to run (hide password)
-        Write-Host "    Command: net use $Letter $Path /user:$domainUser [PASSWORD] /persistent:yes" -ForegroundColor DarkGray
-        
-        # Use cmd /c to call net use (this is what worked manually!)
-        # Escape the path if it has spaces
-        $escapedPath = if ($Path -match '\s') { "`"$Path`"" } else { $Path }
-        $command = "net use $Letter $escapedPath /user:$domainUser $Password /persistent:yes"
-        
-        $output = cmd /c $command 2>&1
+        # Map using stored credentials (no password on command line!)
+        $output = net use $Letter $Path /persistent:yes 2>&1
         
         if ($LASTEXITCODE -eq 0) {
             Write-Host "[OK] $Letter -> $Name" -ForegroundColor Green
             return $true
         } else {
             Write-Host "[SKIP] $Letter -> $Name" -ForegroundColor Yellow
-            Write-Host "       Exit Code: $LASTEXITCODE" -ForegroundColor DarkGray
             Write-Host "       Error: $output" -ForegroundColor DarkGray
             return $false
         }
@@ -139,7 +131,6 @@ if (-not $Option) {
     Write-Host ""
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host "           VORTEX SYSTEMS - NETWORK DRIVE MAPPER" -ForegroundColor Cyan
-    Write-Host "                   DEBUG VERSION" -ForegroundColor Yellow
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  1. Map Standard Drives (U, O, R, Q, N, S, V, P)" -ForegroundColor White
@@ -160,31 +151,38 @@ if ($Option -eq "1") {
     $cred = Get-Creds
     $username = $cred.Username
     $password = $cred.Password
+    $domainUser = "$Domain\$username"
     
     Write-Host ""
-    Write-Host "Domain: $Domain" -ForegroundColor DarkGray
-    Write-Host "Server: $ServerFQDN" -ForegroundColor DarkGray
-    Write-Host "User: $Domain\$username" -ForegroundColor DarkGray
-    Write-Host ""
-    
     Clear-Sessions
     
+    # Store credentials using cmdkey (handles special characters!)
+    Write-Host "Storing credentials using Windows Credential Manager..." -ForegroundColor Cyan
+    cmdkey /add:$ServerFQDN /user:$domainUser /pass:$password 2>&1 | Out-Null
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "[OK] Credentials stored" -ForegroundColor Green
+    } else {
+        Write-Host "[WARNING] cmdkey failed - trying anyway" -ForegroundColor Yellow
+    }
+    
+    Write-Host ""
     Write-Host "Mapping standard drives..." -ForegroundColor Cyan
     Write-Host ""
     
     $successCount = 0
     
     foreach ($share in $StandardShares) {
-        if (Map-Drive -Letter $share.Letter -Path $share.Path -Name $share.Name -Username $username -Password $password) {
+        if (Map-Drive -Letter $share.Letter -Path $share.Path -Name $share.Name) {
             $successCount++
         }
-        Write-Host ""
-        Start-Sleep -Milliseconds 500
+        Start-Sleep -Milliseconds 300
     }
     
+    Write-Host ""
     Write-Host "Mapping personal folder..." -ForegroundColor Cyan
     $personalPath = "\\$ServerFQDN\EMPLOYEE$\$username"
-    if (Map-Drive -Letter "P:" -Path $personalPath -Name "Personal" -Username $username -Password $password) {
+    if (Map-Drive -Letter "P:" -Path $personalPath -Name "Personal") {
         $successCount++
     }
     
@@ -206,6 +204,14 @@ elseif ($Option -eq "2") {
     $cred = Get-Creds
     $username = $cred.Username
     $password = $cred.Password
+    $domainUser = "$Domain\$username"
+    
+    Write-Host ""
+    
+    # Store credentials using cmdkey
+    Write-Host "Storing credentials..." -ForegroundColor Cyan
+    cmdkey /add:$ServerFQDN /user:$domainUser /pass:$password 2>&1 | Out-Null
+    Write-Host "[OK] Credentials stored" -ForegroundColor Green
     
     Write-Host ""
     Write-Host "Mapping special shares..." -ForegroundColor Cyan
@@ -214,11 +220,10 @@ elseif ($Option -eq "2") {
     $successCount = 0
     
     foreach ($share in $SpecialShares) {
-        if (Map-Drive -Letter $share.Letter -Path $share.Path -Name $share.Name -Username $username -Password $password) {
+        if (Map-Drive -Letter $share.Letter -Path $share.Path -Name $share.Name) {
             $successCount++
         }
-        Write-Host ""
-        Start-Sleep -Milliseconds 500
+        Start-Sleep -Milliseconds 300
     }
     
     Write-Host ""
