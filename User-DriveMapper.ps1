@@ -26,17 +26,23 @@ $SpecialShares = @(
 
 # Get credentials using Windows dialog (handles special chars!)
 function Get-Creds {
+    Write-Host "Opening Windows credential dialog..." -ForegroundColor Cyan
     $cred = Get-Credential -Message "Enter your domain credentials" -UserName "$Domain\"
     if (!$cred) {
         Write-Host "Cancelled." -ForegroundColor Yellow
         exit
     }
+    Write-Host "[OK] Credentials received for: $($cred.UserName)" -ForegroundColor Green
     return $cred
 }
 
 # Map drive using PSCredential (safest method)
 function Map-Drive {
     param($Letter, $Path, $Name, $Cred)
+    
+    Write-Host ">>> Attempting: $Letter -> $Name" -ForegroundColor Yellow
+    Write-Host "    Path: $Path" -ForegroundColor DarkGray
+    Write-Host "    User: $($Cred.UserName)" -ForegroundColor DarkGray
     
     try {
         # Remove if exists
@@ -52,6 +58,7 @@ function Map-Drive {
         return $true
     } catch {
         Write-Host "[SKIP] $Letter -> $Name" -ForegroundColor Yellow
+        Write-Host "       Error: $($_.Exception.Message)" -ForegroundColor Red
         return $false
     }
 }
