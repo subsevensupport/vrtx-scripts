@@ -1,6 +1,6 @@
 # =====================================================================
-#  Vortex Systems - Network Drive Mapper
-#  Using direct net use (proven to work)
+#  Vortex Systems - Network Drive Mapper (DEBUG VERSION)
+#  Shows exactly what's happening
 # =====================================================================
 
 param([string]$Option)
@@ -77,7 +77,6 @@ function Get-Creds {
 function Clear-Sessions {
     Write-Host "Clearing existing connections..." -ForegroundColor Cyan
     
-    # Clear all drive letters
     foreach ($share in $StandardShares) {
         if (Test-Path $share.Letter) {
             net use $share.Letter /delete /yes 2>&1 | Out-Null
@@ -92,32 +91,61 @@ function Clear-Sessions {
         net use P: /delete /yes 2>&1 | Out-Null
     }
     
-    # Clear server sessions
     net use \\$ServerFQDN /delete /yes 2>&1 | Out-Null
     
     Write-Host "[OK] Cleared" -ForegroundColor Green
     Write-Host ""
 }
 
-# Map a drive - USING METHOD THAT WORKS!
+# Map a drive - WITH FULL DEBUGGING
 function Map-Drive {
     param([string]$Letter, [string]$Path, [string]$Name, [string]$Username, [string]$Password)
     
+    Write-Host ">>> Attempting: $Letter -> $Name" -ForegroundColor Yellow
+    
     try {
-        # Use net use with credentials DIRECTLY (this is what works manually!)
         $domainUser = "$Domain\$Username"
         
-        # Call net use with credentials
-        $result = cmd /c "net use $Letter `"$Path`" /user:$domainUser $Password /persistent:yes 2>&1"
+        # Show what we're about to run (hide password)
+        Write-Host "    Command: net use $Letter `"$Path`" /user:$domainUser [PASSWORD] /persistent:yes" -ForegroundColor DarkGray
         
-        if ($LASTEXITCODE -eq 0) {
+        # Create temp files for output
+        $tempOut = [System.IO.Path]::GetTempFileName()
+        $tempErr = [System.IO.Path]::GetTempFileName()
+        
+        # Build command with escaped quotes
+        $netUseCmd = "net use $Letter `"$Path`" /user:`"$domainUser`" `"$Password`" /persistent:yes"
+        
+        # Execute using Start-Process for better control
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = "cmd.exe"
+        $psi.Arguments = "/c $netUseCmd >$tempOut 2>$tempErr"
+        $psi.WindowStyle = "Hidden"
+        $psi.CreateNoWindow = $true
+        $psi.UseShellExecute = $false
+        
+        $process = [System.Diagnostics.Process]::Start($psi)
+        $process.WaitForExit()
+        
+        $exitCode = $process.ExitCode
+        $stdout = if (Test-Path $tempOut) { Get-Content $tempOut -Raw } else { "" }
+        $stderr = if (Test-Path $tempErr) { Get-Content $tempErr -Raw } else { "" }
+        
+        # Clean up temp files
+        Remove-Item $tempOut -ErrorAction SilentlyContinue
+        Remove-Item $tempErr -ErrorAction SilentlyContinue
+        
+        if ($exitCode -eq 0) {
             Write-Host "[OK] $Letter -> $Name" -ForegroundColor Green
             return $true
         } else {
             Write-Host "[SKIP] $Letter -> $Name" -ForegroundColor Yellow
-            Write-Host "       Error: $result" -ForegroundColor DarkGray
+            Write-Host "       Exit Code: $exitCode" -ForegroundColor DarkGray
+            if ($stdout) { Write-Host "       Output: $stdout" -ForegroundColor DarkGray }
+            if ($stderr) { Write-Host "       Error: $stderr" -ForegroundColor DarkGray }
             return $false
         }
+        
     } catch {
         Write-Host "[SKIP] $Letter -> $Name" -ForegroundColor Yellow
         Write-Host "       Exception: $($_.Exception.Message)" -ForegroundColor DarkGray
@@ -131,6 +159,7 @@ if (-not $Option) {
     Write-Host ""
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host "           VORTEX SYSTEMS - NETWORK DRIVE MAPPER" -ForegroundColor Cyan
+    Write-Host "                   DEBUG VERSION" -ForegroundColor Yellow
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  1. Map Standard Drives (U, O, R, Q, N, S, V, P)" -ForegroundColor White
@@ -153,6 +182,11 @@ if ($Option -eq "1") {
     $password = $cred.Password
     
     Write-Host ""
+    Write-Host "Domain: $Domain" -ForegroundColor DarkGray
+    Write-Host "Server: $ServerFQDN" -ForegroundColor DarkGray
+    Write-Host "User: $Domain\$username" -ForegroundColor DarkGray
+    Write-Host ""
+    
     Clear-Sessions
     
     Write-Host "Mapping standard drives..." -ForegroundColor Cyan
@@ -164,10 +198,10 @@ if ($Option -eq "1") {
         if (Map-Drive -Letter $share.Letter -Path $share.Path -Name $share.Name -Username $username -Password $password) {
             $successCount++
         }
-        Start-Sleep -Milliseconds 300
+        Write-Host ""
+        Start-Sleep -Milliseconds 500
     }
     
-    Write-Host ""
     Write-Host "Mapping personal folder..." -ForegroundColor Cyan
     $personalPath = "\\$ServerFQDN\EMPLOYEE$\$username"
     if (Map-Drive -Letter "P:" -Path $personalPath -Name "Personal" -Username $username -Password $password) {
@@ -188,10 +222,6 @@ elseif ($Option -eq "2") {
     Write-Host "               MAPPING SPECIAL SHARES" -ForegroundColor Cyan
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "Special shares (requires specific permissions):" -ForegroundColor Yellow
-    Write-Host "  T: Quotations - Requires FS_SP_BUSS_0-Quotations_RW" -ForegroundColor Yellow
-    Write-Host "  I: Crib Catalog - Requires FS_SP_VTX_Crib-Catalog_RW" -ForegroundColor Yellow
-    Write-Host ""
     
     $cred = Get-Creds
     $username = $cred.Username
@@ -207,7 +237,8 @@ elseif ($Option -eq "2") {
         if (Map-Drive -Letter $share.Letter -Path $share.Path -Name $share.Name -Username $username -Password $password) {
             $successCount++
         }
-        Start-Sleep -Milliseconds 300
+        Write-Host ""
+        Start-Sleep -Milliseconds 500
     }
     
     Write-Host ""
