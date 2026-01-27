@@ -1,144 +1,74 @@
-<#
-Vortex Systems - Simple Drive Mapper (User) - FIXED
-- Prompts for credentials
-- Stores them in Credential Manager (cmdkey) for the file server target
-- Maps drives with proper success/failure checks (no false [OK])
-- Handles share names with spaces by quoting UNC paths
-- Quietly removes existing mappings (suppresses NET HELPMSG 2250 noise)
+<# 
+User-DriveMapper (SSO version)
+- Maps drives using the CURRENT logged-in user's domain credentials (Kerberos/SSO)
+- No prompts, no cmdkey, no net use password arguments
+- Uses New-PSDrive -Persist for reliable mappings (including shares with spaces)
+- IMPORTANT: Use ONE consistent server name everywhere (prefer short name, not FQDN)
 
-Run this as the signed-in user (NOT as Administrator).
+Run as the logged-in user (not elevated unless you have a reason).
 #>
+
+[CmdletBinding()]
+param(
+    [string]$Server = "VORTEXFS",
+    [switch]$ResetConnections
+)
 
 $ErrorActionPreference = "Stop"
 
-# ====== EDIT THESE IF NEEDED ======
-$Server        = "VORTEXFS.hq.vortex-systems.com"
-$NetBIOSDomain = "VORTEX-SYSTEMS"   # adjust if your NetBIOS name differs (e.g. VORTEX)
-$ClearExistingConnectionsToServer = $true  # helps avoid NET USE error 1219
-# =================================
+function Write-Ok($msg){ Write-Host "[OK]  $msg" -ForegroundColor Green }
+function Write-Warn($msg){ Write-Host "[WARN] $msg" -ForegroundColor Yellow }
+function Write-Fail($msg){ Write-Host "[FAIL] $msg" -ForegroundColor Red }
 
-# Drive definitions (edit share names here if needed)
-$DriveMaps = @(
-    @{ Letter = "U:"; Share = "BUSINESS$" },
-    @{ Letter = "O:"; Share = "EMPLOYEE$" },
-    @{ Letter = "R:"; Share = "ENGINEERING RECORDS$" },  # space is OK (quoted)
-    @{ Letter = "Q:"; Share = "ENGINEERING$" },
-    @{ Letter = "N:"; Share = "FINANCE-HR$" },
-    @{ Letter = "S:"; Share = "SOFTWARE$" },
-    @{ Letter = "V:"; Share = "VORTEX$" }
-)
+function Remove-Drive($Letter) {
+    # Remove existing PSDrive mapping if present
+    try {
+        if (Get-PSDrive -Name $Letter.TrimEnd(':') -ErrorAction SilentlyContinue) {
+            Remove-PSDrive -Name $Letter.TrimEnd(':') -Force -ErrorAction SilentlyContinue
+        }
+    } catch {}
 
-# Optional drives (will be attempted; failures are OK)
-$OptionalDriveMaps = @(
-    @{ Letter = "T:"; Share = "Quotations$" },      # <-- change to your real share name if different
-    @{ Letter = "I:"; Share = "Crib Catalog$" }     # <-- change to your real share name if different
-)
-
-function Read-PlainPassword {
-    param([string]$Prompt = "Password")
-    $sec = Read-Host -AsSecureString $Prompt
-    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)
-    try { [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
-    finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+    # Also remove any existing net use mapping quietly
+    cmd /c "net use $Letter /delete /y" >$null 2>&1
 }
 
-function Normalize-User {
-    param([Parameter(Mandatory)][string]$UserInput)
-    # If user typed DOMAIN\user or user@domain, keep it as-is.
-    if ($UserInput -match '\\' -or $UserInput -match '@') { return $UserInput }
-    return "$NetBIOSDomain\$UserInput"
-}
+function Map-Drive($Letter, $UNC) {
+    Remove-Drive $Letter
 
-function Remove-DriveQuiet {
-    param([Parameter(Mandatory)][string]$Letter)
-    cmd /c "net use $Letter /delete /y" > $null 2>&1
-}
-
-function Map-Drive {
-    param(
-        [Parameter(Mandatory)][string]$Letter,
-        [Parameter(Mandatory)][string]$UNC,
-        [Parameter(Mandatory)][string]$User,
-        [Parameter(Mandatory)][string]$Password,
-        [switch]$Optional
-    )
-
-    Remove-DriveQuiet -Letter $Letter
-
-    # Quote UNC + username + password (handles spaces safely)
-    $qUNC  = '"' + $UNC + '"'
-    $qUser = '"' + $User + '"'
-    $qPwd  = '"' + ($Password.Replace('"','\"')) + '"'
-
-    $out = cmd /c "net use $Letter $qUNC /user:$qUser $qPwd /persistent:yes" 2>&1
-    $rc = $LASTEXITCODE
-
-    if ($rc -eq 0) {
-        Write-Host "[OK]   $Letter -> $UNC" -ForegroundColor Green
+    try {
+        New-PSDrive -Name $Letter.TrimEnd(':') -PSProvider FileSystem -Root $UNC -Persist -Scope Global | Out-Null
+        Write-Ok "$Letter -> $UNC"
         return $true
-    }
-
-    if ($Optional) {
-        Write-Host "[SKIP] $Letter -> $UNC" -ForegroundColor Yellow
-        Write-Host "       $out" -ForegroundColor DarkYellow
+    } catch {
+        Write-Fail "$Letter -> $UNC"
+        Write-Warn $_.Exception.Message
         return $false
     }
-
-    Write-Host "[FAIL] $Letter -> $UNC" -ForegroundColor Red
-    Write-Host "       $out" -ForegroundColor Red
-    return $false
 }
 
-function Add-CmdKey {
-    param(
-        [Parameter(Mandatory)][string]$Target,
-        [Parameter(Mandatory)][string]$User,
-        [Parameter(Mandatory)][string]$Password
-    )
-    # Store creds for auto-reconnect after reboot/login
-    $qTarget = '"' + $Target + '"'
-    $qUser   = '"' + $User + '"'
-    $qPwd    = '"' + ($Password.Replace('"','\"')) + '"'
-    cmd /c "cmdkey /add:$qTarget /user:$qUser /pass:$qPwd" > $null 2>&1
+# Optional: clear existing SMB connections to this server (fixes “multiple connections” / error 1219)
+if ($ResetConnections) {
+    Write-Warn "ResetConnections enabled: clearing existing SMB connections to \\$Server\*"
+    cmd /c "net use \\$Server\* /delete /y" >$null 2>&1
 }
+
+# Build UNC roots (keep server name consistent!)
+$O = "\\$Server\EMPLOYEE$"
+$P = "\\$Server\EMPLOYEE$\$env:USERNAME"
+$R = "\\$Server\ENGINEERING RECORDS$"
+$Q = "\\$Server\ENGINEERING$"
+$N = "\\$Server\FINANCE-HR$"
 
 Write-Host ""
-Write-Host "Vortex Drive Mapper (Fixed)" -ForegroundColor Cyan
-Write-Host "Server: $Server" -ForegroundColor DarkCyan
+Write-Host "Mapping drives using SSO against \\$Server ..." -ForegroundColor Cyan
 Write-Host ""
 
-# Gather credentials
-$userInput = Read-Host "Username (e.g. jsmith OR $NetBIOSDomain\jsmith OR jsmith@domain)"
-$user = Normalize-User -UserInput $userInput
-$pwd  = Read-PlainPassword -Prompt "Password"
-
-# Helpful to avoid error 1219 (multiple connections under different creds)
-if ($ClearExistingConnectionsToServer) {
-    cmd /c "net use \\$Server\* /delete /y" > $null 2>&1
-}
-
-# Save creds for the server so Windows can reconnect
-Add-CmdKey -Target $Server -User $user -Password $pwd
-
-# Map required drives
-$failed = @()
-foreach ($m in $DriveMaps) {
-    $unc = "\\$Server\$($m.Share)"
-    $ok = Map-Drive -Letter $m.Letter -UNC $unc -User $user -Password $pwd
-    if (-not $ok) { $failed += $m.Letter }
-}
-
-# Map optional drives
-foreach ($m in $OptionalDriveMaps) {
-    $unc = "\\$Server\$($m.Share)"
-    Map-Drive -Letter $m.Letter -UNC $unc -User $user -Password $pwd -Optional
-}
+# Drive mappings (edit letters/paths here if you want)
+Map-Drive "O:" $O | Out-Null
+Map-Drive "P:" $P | Out-Null
+Map-Drive "R:" $R | Out-Null
+Map-Drive "Q:" $Q | Out-Null
+Map-Drive "N:" $N | Out-Null
 
 Write-Host ""
-if ($failed.Count -gt 0) {
-    Write-Host "Done (with failures): $($failed -join ', ')" -ForegroundColor Red
-    Write-Host "Tip: Run 'net use' to check existing connections and look for error 1219/5/53/67." -ForegroundColor DarkRed
-    exit 1
-} else {
-    Write-Host "Done. All required drives mapped." -ForegroundColor Green
-}
+Write-Ok "Done. If any drive shows [FAIL], try: .\User-DriveMapper_SSO.ps1 -ResetConnections"
