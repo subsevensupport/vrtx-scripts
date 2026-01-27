@@ -24,41 +24,64 @@ $SpecialShares = @(
     @{L = "I:"; P = "\\$Server\crib-catalog$"; N = "Crib Catalog"}
 )
 
-# Get credentials using Windows dialog (handles special chars!)
+# Get credentials - SAME METHOD AS PRINTER SCRIPT
 function Get-Creds {
-    Write-Host "Opening Windows credential dialog..." -ForegroundColor Cyan
-    $cred = Get-Credential -Message "Enter your domain credentials" -UserName "$Domain\"
-    if (!$cred) {
-        Write-Host "Cancelled." -ForegroundColor Yellow
-        exit
+    Write-Host ""
+    Write-Host "Authentication required" -ForegroundColor Yellow
+    Write-Host ""
+    
+    $username = Read-Host "Username (no domain)"
+    
+    if ([string]::IsNullOrWhiteSpace($username)) {
+        Write-Error "Authentication cancelled."
+        exit 1
     }
-    Write-Host "[OK] Credentials received for: $($cred.UserName)" -ForegroundColor Green
-    return $cred
+    
+    $securePass = Read-Host "Password" -AsSecureString
+    $password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePass))
+    
+    if ([string]::IsNullOrWhiteSpace($password)) {
+        Write-Error "Authentication cancelled."
+        exit 1
+    }
+    
+    $fullUsername = "$Domain\$username"
+    
+    Write-Host ""
+    Write-Host "[OK] Using credentials for: $fullUsername" -ForegroundColor Green
+    
+    # Return both username and password for use
+    return @{
+        FullUsername = $fullUsername
+        Username = $username
+        Password = $password
+    }
 }
 
-# Map drive using PSCredential (safest method)
+# Map drive using cmdkey + net use (SAME AS PRINTER SCRIPT METHOD)
 function Map-Drive {
-    param($Letter, $Path, $Name, $Cred)
+    param($Letter, $Path, $Name)
     
-    Write-Host ">>> Attempting: $Letter -> $Name" -ForegroundColor Yellow
-    Write-Host "    Path: $Path" -ForegroundColor DarkGray
-    Write-Host "    User: $($Cred.UserName)" -ForegroundColor DarkGray
+    Write-Host "  $Name..." -ForegroundColor Cyan -NoNewline
     
     try {
         # Remove if exists
         if (Test-Path $Letter) {
-            Remove-PSDrive -Name $Letter.TrimEnd(':') -Force -ErrorAction SilentlyContinue
             net use $Letter /delete /yes 2>&1 | Out-Null
         }
         
-        # Map using New-PSDrive (handles special chars in password!)
-        New-PSDrive -Name $Letter.TrimEnd(':') -PSProvider FileSystem -Root $Path -Credential $Cred -Persist -Scope Global -ErrorAction Stop | Out-Null
+        # Map using stored credentials (from cmdkey)
+        $result = net use $Letter $Path /persistent:yes 2>&1
         
-        Write-Host "[OK] $Letter -> $Name" -ForegroundColor Green
-        return $true
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host " Mapped" -ForegroundColor Green
+            return $true
+        } else {
+            Write-Host " Failed" -ForegroundColor Red
+            return $false
+        }
     } catch {
-        Write-Host "[SKIP] $Letter -> $Name" -ForegroundColor Yellow
-        Write-Host "       Error: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host " Failed" -ForegroundColor Red
         return $false
     }
 }
@@ -81,58 +104,92 @@ if (-not $Option) {
 # OPTION 1: Standard
 if ($Option -eq "1") {
     Write-Host ""
-    Write-Host "Mapping standard drives..." -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  Mapping Standard Drives" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    
+    # Get credentials (same as printer script)
+    $cred = Get-Creds
+    
+    # Store credentials using cmdkey (same as printer script)
+    Write-Host "Storing credentials..." -ForegroundColor Gray
+    & cmdkey /add:$Server /user:$cred.FullUsername /pass:$cred.Password 2>&1 | Out-Null
+    
+    Write-Host ""
+    Write-Host "Mapping drives..." -ForegroundColor Yellow
     Write-Host ""
     
-    $cred = Get-Creds
     $count = 0
     
     foreach ($s in $Shares) {
-        if (Map-Drive -Letter $s.L -Path $s.P -Name $s.N -Cred $cred) { $count++ }
+        if (Map-Drive -Letter $s.L -Path $s.P -Name $s.N) { $count++ }
     }
     
     # Personal
-    $username = $cred.UserName.Split('\')[-1]
-    $personalPath = "\\$Server\EMPLOYEE$\$username"
-    if (Map-Drive -Letter "P:" -Path $personalPath -Name "Personal" -Cred $cred) { $count++ }
+    Write-Host ""
+    Write-Host "Mapping personal folder..." -ForegroundColor Yellow
+    Write-Host ""
+    $personalPath = "\\$Server\EMPLOYEE$\$($cred.Username)"
+    if (Map-Drive -Letter "P:" -Path $personalPath -Name "Personal") { $count++ }
     
     Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "Mapped: $count drives" -ForegroundColor Green
+    Write-Host "========================================" -ForegroundColor Cyan
 }
 
 # OPTION 2: Special
 elseif ($Option -eq "2") {
     Write-Host ""
-    Write-Host "Mapping special shares..." -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  Mapping Special Shares" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    
+    # Get credentials (same as printer script)
+    $cred = Get-Creds
+    
+    # Store credentials using cmdkey (same as printer script)
+    Write-Host "Storing credentials..." -ForegroundColor Gray
+    & cmdkey /add:$Server /user:$cred.FullUsername /pass:$cred.Password 2>&1 | Out-Null
+    
+    Write-Host ""
+    Write-Host "Mapping special shares..." -ForegroundColor Yellow
     Write-Host ""
     
-    $cred = Get-Creds
     $count = 0
     
     foreach ($s in $SpecialShares) {
-        if (Map-Drive -Letter $s.L -Path $s.P -Name $s.N -Cred $cred) { $count++ }
+        if (Map-Drive -Letter $s.L -Path $s.P -Name $s.N) { $count++ }
     }
     
     Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "Mapped: $count shares" -ForegroundColor Green
+    Write-Host "========================================" -ForegroundColor Cyan
 }
 
 # OPTION 3: Remove
 elseif ($Option -eq "3") {
     Write-Host ""
     Write-Host "Removing all drives..." -ForegroundColor Cyan
+    Write-Host ""
     
+    # Clear cmdkey
+    & cmdkey /delete:$Server 2>&1 | Out-Null
+    
+    # Remove all drives
     foreach ($s in $Shares + $SpecialShares) {
         if (Test-Path $s.L) {
-            Remove-PSDrive -Name $s.L.TrimEnd(':') -Force -ErrorAction SilentlyContinue
             net use $s.L /delete /yes 2>&1 | Out-Null
+            Write-Host "  Removed $($s.L)" -ForegroundColor Gray
         }
     }
     if (Test-Path "P:") {
-        Remove-PSDrive -Name "P" -Force -ErrorAction SilentlyContinue
         net use P: /delete /yes 2>&1 | Out-Null
+        Write-Host "  Removed P:" -ForegroundColor Gray
     }
     
+    Write-Host ""
     Write-Host "[OK] All removed" -ForegroundColor Green
 }
 
