@@ -107,42 +107,18 @@ function Map-Drive {
         $domainUser = "$Domain\$Username"
         
         # Show what we're about to run (hide password)
-        Write-Host "    Command: net use $Letter `"$Path`" /user:$domainUser [PASSWORD] /persistent:yes" -ForegroundColor DarkGray
+        Write-Host "    Command: net use $Letter $Path /user:$domainUser [PASSWORD] /persistent:yes" -ForegroundColor DarkGray
         
-        # Create temp files for output
-        $tempOut = [System.IO.Path]::GetTempFileName()
-        $tempErr = [System.IO.Path]::GetTempFileName()
+        # Call net use directly (no cmd.exe wrapper to avoid quote issues)
+        $output = & net use $Letter $Path /user:$domainUser $Password /persistent:yes 2>&1
         
-        # Build command with escaped quotes
-        $netUseCmd = "net use $Letter `"$Path`" /user:`"$domainUser`" `"$Password`" /persistent:yes"
-        
-        # Execute using Start-Process for better control
-        $psi = New-Object System.Diagnostics.ProcessStartInfo
-        $psi.FileName = "cmd.exe"
-        $psi.Arguments = "/c $netUseCmd >$tempOut 2>$tempErr"
-        $psi.WindowStyle = "Hidden"
-        $psi.CreateNoWindow = $true
-        $psi.UseShellExecute = $false
-        
-        $process = [System.Diagnostics.Process]::Start($psi)
-        $process.WaitForExit()
-        
-        $exitCode = $process.ExitCode
-        $stdout = if (Test-Path $tempOut) { Get-Content $tempOut -Raw } else { "" }
-        $stderr = if (Test-Path $tempErr) { Get-Content $tempErr -Raw } else { "" }
-        
-        # Clean up temp files
-        Remove-Item $tempOut -ErrorAction SilentlyContinue
-        Remove-Item $tempErr -ErrorAction SilentlyContinue
-        
-        if ($exitCode -eq 0) {
+        if ($LASTEXITCODE -eq 0) {
             Write-Host "[OK] $Letter -> $Name" -ForegroundColor Green
             return $true
         } else {
             Write-Host "[SKIP] $Letter -> $Name" -ForegroundColor Yellow
-            Write-Host "       Exit Code: $exitCode" -ForegroundColor DarkGray
-            if ($stdout) { Write-Host "       Output: $stdout" -ForegroundColor DarkGray }
-            if ($stderr) { Write-Host "       Error: $stderr" -ForegroundColor DarkGray }
+            Write-Host "       Exit Code: $LASTEXITCODE" -ForegroundColor DarkGray
+            Write-Host "       Error: $output" -ForegroundColor DarkGray
             return $false
         }
         
