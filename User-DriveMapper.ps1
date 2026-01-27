@@ -86,8 +86,10 @@ function Map-Drive {
     } catch {
         if ($_.Exception.Message -match "access|denied|1326") {
             Write-Host "[SKIP] $Letter -> $Name (no permission)" -ForegroundColor Yellow
+            Write-Error $_.Exception.Message
         } else {
             Write-Host "[SKIP] $Letter -> $Name" -ForegroundColor Yellow
+            Write-Error $_.Exception.Message
         }
         return $false
     }
