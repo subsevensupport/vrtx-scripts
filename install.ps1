@@ -34,6 +34,6 @@ Write-Host ""
 Write-Host "Starting setup..." -ForegroundColor Cyan
 Write-Host ""
 
-# Run setup with ExecutionPolicy Bypass
-Set-Location $targetDir
-powershell.exe -ExecutionPolicy Bypass -File "$targetDir\Setup-Everything.ps1"
+# Run the script content directly in current session (no new process, no execution policy issue)
+$scriptContent = Get-Content "$targetDir\Setup-Everything.ps1" -Raw
+Invoke-Expression $scriptContent
