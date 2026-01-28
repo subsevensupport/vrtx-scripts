@@ -39,6 +39,7 @@ net use N: /delete /yes 2>&1 | Out-Null
 net use S: /delete /yes 2>&1 | Out-Null
 net use V: /delete /yes 2>&1 | Out-Null
 net use P: /delete /yes 2>&1 | Out-Null
+net use W: /delete /yes 2>&1 | Out-Null
 net use T: /delete /yes 2>&1 | Out-Null
 net use I: /delete /yes 2>&1 | Out-Null
 
@@ -92,6 +93,11 @@ if ($LASTEXITCODE -eq 0) { Write-Host " OK" -ForegroundColor Green } else { Writ
 # P: Personal
 Write-Host "  P: Personal..." -NoNewline
 net use P: "\\VORTEXFS.hq.vortex-systems.com\EMPLOYEE$\$username" /persistent:yes 2>&1 | Out-Null
+if ($LASTEXITCODE -eq 0) { Write-Host " OK" -ForegroundColor Green } else { Write-Host " FAILED" -ForegroundColor Red }
+
+# W: PLOTSCANNER
+Write-Host "  W: PLOTSCANNER..." -NoNewline
+net use W: "\\SMARTWORKSPC\Pictures" /persistent:yes 2>&1 | Out-Null
 if ($LASTEXITCODE -eq 0) { Write-Host " OK" -ForegroundColor Green } else { Write-Host " FAILED" -ForegroundColor Red }
 
 Write-Host ""
