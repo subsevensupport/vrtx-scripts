@@ -58,47 +58,138 @@ Write-Host ""
 # U: BUSINESS
 Write-Host "  U: BUSINESS..." -NoNewline
 net use U: "\\VORTEXFS.hq.vortex-systems.com\BUSINESS$" /persistent:yes 2>&1 | Out-Null
-if ($LASTEXITCODE -eq 0) { Write-Host " OK" -ForegroundColor Green } else { Write-Host " FAILED" -ForegroundColor Red }
+if ($LASTEXITCODE -eq 0) {
+    # Test actual access
+    $testAccess = Test-Path "U:\" -ErrorAction SilentlyContinue
+    if ($testAccess) {
+        Write-Host " OK" -ForegroundColor Green
+    } else {
+        Write-Host " SKIP (no permission)" -ForegroundColor Gray
+        net use U: /delete /yes 2>&1 | Out-Null
+    }
+} else {
+    Write-Host " FAILED" -ForegroundColor Red
+}
 
 # O: EMPLOYEE
 Write-Host "  O: EMPLOYEE..." -NoNewline
 net use O: "\\VORTEXFS.hq.vortex-systems.com\EMPLOYEE$" /persistent:yes 2>&1 | Out-Null
-if ($LASTEXITCODE -eq 0) { Write-Host " OK" -ForegroundColor Green } else { Write-Host " FAILED" -ForegroundColor Red }
+if ($LASTEXITCODE -eq 0) {
+    $testAccess = Test-Path "O:\" -ErrorAction SilentlyContinue
+    if ($testAccess) {
+        Write-Host " OK" -ForegroundColor Green
+    } else {
+        Write-Host " SKIP (no permission)" -ForegroundColor Gray
+        net use O: /delete /yes 2>&1 | Out-Null
+    }
+} else {
+    Write-Host " FAILED" -ForegroundColor Red
+}
 
 # R: ENGINEERING RECORDS
 Write-Host "  R: ENGINEERING RECORDS..." -NoNewline
 net use R: "\\VORTEXFS.hq.vortex-systems.com\ENGINEERING RECORDS$" /persistent:yes 2>&1 | Out-Null
-if ($LASTEXITCODE -eq 0) { Write-Host " OK" -ForegroundColor Green } else { Write-Host " FAILED" -ForegroundColor Red }
+if ($LASTEXITCODE -eq 0) {
+    $testAccess = Test-Path "R:\" -ErrorAction SilentlyContinue
+    if ($testAccess) {
+        Write-Host " OK" -ForegroundColor Green
+    } else {
+        Write-Host " SKIP (no permission)" -ForegroundColor Gray
+        net use R: /delete /yes 2>&1 | Out-Null
+    }
+} else {
+    Write-Host " FAILED" -ForegroundColor Red
+}
 
 # Q: ENGINEERING
 Write-Host "  Q: ENGINEERING..." -NoNewline
 net use Q: "\\VORTEXFS.hq.vortex-systems.com\ENGINEERING$" /persistent:yes 2>&1 | Out-Null
-if ($LASTEXITCODE -eq 0) { Write-Host " OK" -ForegroundColor Green } else { Write-Host " FAILED" -ForegroundColor Red }
+if ($LASTEXITCODE -eq 0) {
+    $testAccess = Test-Path "Q:\" -ErrorAction SilentlyContinue
+    if ($testAccess) {
+        Write-Host " OK" -ForegroundColor Green
+    } else {
+        Write-Host " SKIP (no permission)" -ForegroundColor Gray
+        net use Q: /delete /yes 2>&1 | Out-Null
+    }
+} else {
+    Write-Host " FAILED" -ForegroundColor Red
+}
 
 # N: FINANCE-HR
 Write-Host "  N: FINANCE-HR..." -NoNewline
 net use N: "\\VORTEXFS.hq.vortex-systems.com\FINANCE-HR$" /persistent:yes 2>&1 | Out-Null
-if ($LASTEXITCODE -eq 0) { Write-Host " OK" -ForegroundColor Green } else { Write-Host " FAILED" -ForegroundColor Red }
+if ($LASTEXITCODE -eq 0) {
+    $testAccess = Test-Path "N:\" -ErrorAction SilentlyContinue
+    if ($testAccess) {
+        Write-Host " OK" -ForegroundColor Green
+    } else {
+        Write-Host " SKIP (no permission)" -ForegroundColor Gray
+        net use N: /delete /yes 2>&1 | Out-Null
+    }
+} else {
+    Write-Host " FAILED" -ForegroundColor Red
+}
 
 # S: SOFTWARE
 Write-Host "  S: SOFTWARE..." -NoNewline
 net use S: "\\VORTEXFS.hq.vortex-systems.com\SOFTWARE$" /persistent:yes 2>&1 | Out-Null
-if ($LASTEXITCODE -eq 0) { Write-Host " OK" -ForegroundColor Green } else { Write-Host " FAILED" -ForegroundColor Red }
+if ($LASTEXITCODE -eq 0) {
+    $testAccess = Test-Path "S:\" -ErrorAction SilentlyContinue
+    if ($testAccess) {
+        Write-Host " OK" -ForegroundColor Green
+    } else {
+        Write-Host " SKIP (no permission)" -ForegroundColor Gray
+        net use S: /delete /yes 2>&1 | Out-Null
+    }
+} else {
+    Write-Host " FAILED" -ForegroundColor Red
+}
 
 # V: VORTEX
 Write-Host "  V: VORTEX..." -NoNewline
 net use V: "\\VORTEXFS.hq.vortex-systems.com\VORTEX" /persistent:yes 2>&1 | Out-Null
-if ($LASTEXITCODE -eq 0) { Write-Host " OK" -ForegroundColor Green } else { Write-Host " FAILED" -ForegroundColor Red }
+if ($LASTEXITCODE -eq 0) {
+    $testAccess = Test-Path "V:\" -ErrorAction SilentlyContinue
+    if ($testAccess) {
+        Write-Host " OK" -ForegroundColor Green
+    } else {
+        Write-Host " SKIP (no permission)" -ForegroundColor Gray
+        net use V: /delete /yes 2>&1 | Out-Null
+    }
+} else {
+    Write-Host " FAILED" -ForegroundColor Red
+}
 
 # P: Personal
 Write-Host "  P: Personal..." -NoNewline
 net use P: "\\VORTEXFS.hq.vortex-systems.com\EMPLOYEE$\$username" /persistent:yes 2>&1 | Out-Null
-if ($LASTEXITCODE -eq 0) { Write-Host " OK" -ForegroundColor Green } else { Write-Host " FAILED" -ForegroundColor Red }
+if ($LASTEXITCODE -eq 0) {
+    $testAccess = Test-Path "P:\" -ErrorAction SilentlyContinue
+    if ($testAccess) {
+        Write-Host " OK" -ForegroundColor Green
+    } else {
+        Write-Host " SKIP (no permission)" -ForegroundColor Gray
+        net use P: /delete /yes 2>&1 | Out-Null
+    }
+} else {
+    Write-Host " FAILED" -ForegroundColor Red
+}
 
 # W: PLOTSCANNER
 Write-Host "  W: PLOTSCANNER..." -NoNewline
 net use W: "\\SMARTWORKSPC\Pictures" /persistent:yes 2>&1 | Out-Null
-if ($LASTEXITCODE -eq 0) { Write-Host " OK" -ForegroundColor Green } else { Write-Host " FAILED" -ForegroundColor Red }
+if ($LASTEXITCODE -eq 0) {
+    $testAccess = Test-Path "W:\" -ErrorAction SilentlyContinue
+    if ($testAccess) {
+        Write-Host " OK" -ForegroundColor Green
+    } else {
+        Write-Host " SKIP (no permission)" -ForegroundColor Gray
+        net use W: /delete /yes 2>&1 | Out-Null
+    }
+} else {
+    Write-Host " FAILED" -ForegroundColor Red
+}
 
 Write-Host ""
 Write-Host "Mapping special shares..." -ForegroundColor Yellow
@@ -107,12 +198,32 @@ Write-Host ""
 # T: Quotations
 Write-Host "  T: Quotations..." -NoNewline
 net use T: "\\VORTEXFS.hq.vortex-systems.com\0-quotations$" /persistent:yes 2>&1 | Out-Null
-if ($LASTEXITCODE -eq 0) { Write-Host " OK" -ForegroundColor Green } else { Write-Host " SKIP (no permission)" -ForegroundColor Gray }
+if ($LASTEXITCODE -eq 0) {
+    $testAccess = Test-Path "T:\" -ErrorAction SilentlyContinue
+    if ($testAccess) {
+        Write-Host " OK" -ForegroundColor Green
+    } else {
+        Write-Host " SKIP (no permission)" -ForegroundColor Gray
+        net use T: /delete /yes 2>&1 | Out-Null
+    }
+} else {
+    Write-Host " SKIP (no permission)" -ForegroundColor Gray
+}
 
 # I: Crib Catalog
 Write-Host "  I: Crib Catalog..." -NoNewline
 net use I: "\\VORTEXFS.hq.vortex-systems.com\crib_catalog$" /persistent:yes 2>&1 | Out-Null
-if ($LASTEXITCODE -eq 0) { Write-Host " OK" -ForegroundColor Green } else { Write-Host " SKIP (no permission)" -ForegroundColor Gray }
+if ($LASTEXITCODE -eq 0) {
+    $testAccess = Test-Path "I:\" -ErrorAction SilentlyContinue
+    if ($testAccess) {
+        Write-Host " OK" -ForegroundColor Green
+    } else {
+        Write-Host " SKIP (no permission)" -ForegroundColor Gray
+        net use I: /delete /yes 2>&1 | Out-Null
+    }
+} else {
+    Write-Host " SKIP (no permission)" -ForegroundColor Gray
+}
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
