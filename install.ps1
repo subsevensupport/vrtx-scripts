@@ -34,6 +34,6 @@ Write-Host ""
 Write-Host "Starting setup..." -ForegroundColor Cyan
 Write-Host ""
 
-# Run setup
+# Run setup with ExecutionPolicy Bypass
 Set-Location $targetDir
-& "$targetDir\Setup-Everything.ps1"
+powershell.exe -ExecutionPolicy Bypass -File "$targetDir\Setup-Everything.ps1"
