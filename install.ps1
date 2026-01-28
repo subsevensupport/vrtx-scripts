@@ -105,7 +105,7 @@ if ($LASTEXITCODE -eq 0) { Write-Host " OK" -ForegroundColor Green } else { Writ
 
 # I: Crib Catalog
 Write-Host "  I: Crib Catalog..." -NoNewline
-net use I: "\\VORTEXFS.hq.vortex-systems.com\crib-catalog$" /persistent:yes 2>&1 | Out-Null
+net use I: "\\VORTEXFS.hq.vortex-systems.com\crib_catalog$" /persistent:yes 2>&1 | Out-Null
 if ($LASTEXITCODE -eq 0) { Write-Host " OK" -ForegroundColor Green } else { Write-Host " SKIP (no permission)" -ForegroundColor Gray }
 
 Write-Host ""
