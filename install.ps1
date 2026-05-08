@@ -234,27 +234,13 @@ Write-Host ""
 # SHOP-PRNT
 Write-Host "  SHOP-PRNT..." -NoNewline
 try {
+    # Remove if already installed (force fresh install)
+    Get-Printer -Name "\\VORTEXFS.hq.vortex-systems.com\SHOP-PRNT" -ErrorAction SilentlyContinue | Remove-Printer -ErrorAction SilentlyContinue
+    # Install fresh
     Add-Printer -ConnectionName "\\VORTEXFS.hq.vortex-systems.com\SHOP-PRNT" -ErrorAction Stop 2>&1 | Out-Null
     Write-Host " OK" -ForegroundColor Green
 } catch {
-    if ($_.Exception.Message -like "*already installed*") {
-        Write-Host " Already installed" -ForegroundColor Gray
-    } elseif ($_.Exception.Message -like "*Access is denied*") {
-        Write-Host " SKIP (no permission)" -ForegroundColor Gray
-    } else {
-        Write-Host " FAILED" -ForegroundColor Red
-    }
-}
-
-# SHOP-CLR-PRNT
-Write-Host "  SHOP-CLR-PRNT..." -NoNewline
-try {
-    Add-Printer -ConnectionName "\\VORTEXFS.hq.vortex-systems.com\SHOP-CLR-PRNT" -ErrorAction Stop 2>&1 | Out-Null
-    Write-Host " OK" -ForegroundColor Green
-} catch {
-    if ($_.Exception.Message -like "*already installed*") {
-        Write-Host " Already installed" -ForegroundColor Gray
-    } elseif ($_.Exception.Message -like "*Access is denied*") {
+    if ($_.Exception.Message -like "*Access is denied*") {
         Write-Host " SKIP (no permission)" -ForegroundColor Gray
     } else {
         Write-Host " FAILED" -ForegroundColor Red
@@ -264,12 +250,13 @@ try {
 # MGNT-PRNT
 Write-Host "  MGNT-PRNT..." -NoNewline
 try {
+    # Remove if already installed (force fresh install)
+    Get-Printer -Name "\\VORTEXFS.hq.vortex-systems.com\MGNT-PRNT" -ErrorAction SilentlyContinue | Remove-Printer -ErrorAction SilentlyContinue
+    # Install fresh
     Add-Printer -ConnectionName "\\VORTEXFS.hq.vortex-systems.com\MGNT-PRNT" -ErrorAction Stop 2>&1 | Out-Null
     Write-Host " OK" -ForegroundColor Green
 } catch {
-    if ($_.Exception.Message -like "*already installed*") {
-        Write-Host " Already installed" -ForegroundColor Gray
-    } elseif ($_.Exception.Message -like "*Access is denied*") {
+    if ($_.Exception.Message -like "*Access is denied*") {
         Write-Host " SKIP (no permission)" -ForegroundColor Gray
     } else {
         Write-Host " FAILED" -ForegroundColor Red
@@ -279,12 +266,13 @@ try {
 # LOBBY-PRNT
 Write-Host "  LOBBY-PRNT..." -NoNewline
 try {
+    # Remove if already installed (force fresh install)
+    Get-Printer -Name "\\VORTEXFS.hq.vortex-systems.com\LOBBY-PRNT" -ErrorAction SilentlyContinue | Remove-Printer -ErrorAction SilentlyContinue
+    # Install fresh
     Add-Printer -ConnectionName "\\VORTEXFS.hq.vortex-systems.com\LOBBY-PRNT" -ErrorAction Stop 2>&1 | Out-Null
     Write-Host " OK" -ForegroundColor Green
 } catch {
-    if ($_.Exception.Message -like "*already installed*") {
-        Write-Host " Already installed" -ForegroundColor Gray
-    } elseif ($_.Exception.Message -like "*Access is denied*") {
+    if ($_.Exception.Message -like "*Access is denied*") {
         Write-Host " SKIP (no permission)" -ForegroundColor Gray
     } else {
         Write-Host " FAILED" -ForegroundColor Red
@@ -294,12 +282,13 @@ try {
 # PLOTTER
 Write-Host "  PLOTTER..." -NoNewline
 try {
+    # Remove if already installed (force fresh install)
+    Get-Printer -Name "\\SMARTWORKSPC\Canon-TM-305" -ErrorAction SilentlyContinue | Remove-Printer -ErrorAction SilentlyContinue
+    # Install fresh
     Add-Printer -ConnectionName "\\SMARTWORKSPC\Canon-TM-305" -ErrorAction Stop 2>&1 | Out-Null
     Write-Host " OK" -ForegroundColor Green
 } catch {
-    if ($_.Exception.Message -like "*already installed*") {
-        Write-Host " Already installed" -ForegroundColor Gray
-    } elseif ($_.Exception.Message -like "*Access is denied*") {
+    if ($_.Exception.Message -like "*Access is denied*") {
         Write-Host " SKIP (no permission)" -ForegroundColor Gray
     } else {
         Write-Host " FAILED" -ForegroundColor Red
